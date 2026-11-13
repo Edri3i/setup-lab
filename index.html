@@ -136,18 +136,20 @@ canvas{width:100%;height:340px;display:block;background:#0e1420;border-radius:10
     allowAfterChoch: false, // allow setups after a CHoCH (before a BOS confirms the trend)
     knotBars: 8,         // number of bars that make the "knot" (consolidation) before the spike
     useKnot: true,       // require the knot to be tight
-    knotMaxATR: 5,       // max knot height in ATR
+    knotMaxATR: 3,       // max knot height in ATR
     atrLen: 14,
     bodyAvgLen: 10,
     bodyVsAvg: 1.3,      // spike body >= this x average body
     bodyMinATR: 0.8,     // spike body >= this x ATR
     wickRatio: 0.3,      // each wick <= this x body
     firstOnly: true,     // only the first break after a BOS is a candidate
-    maxWait: 12,         // bars to wait for price to come back to entry level
-    stopMode: 'spike',   // 'spike' = behind lowest low from spike candle to entry, 'next' = behind low of candle after spike
+    maxWait: 3,          // candles (after the first candle following the spike) in which price may come back to the entry level
+    stopMode: 'swing',   // 'swing' = behind the last swing low before the spike candle (origin of the move), 'spike' = behind lowest low from spike to entry, 'next' = behind low of candle after spike
+    stopSwing: 5,        // bars on the left a swing low must be lower than
+    stopLookback: 60,    // how far back to look for that swing low
     bufferATR: 0.1,      // stop buffer in ATR
     minRiskATR: 0,
-    maxRiskATR: 4,
+    maxRiskATR: 15,      // 0 = no limit
     rr: 1,               // target = rr x risk (1 = 1:1)
     second: true,        // second entry enabled
     e2Frac: 0.5,         // second entry at this fraction of the stop distance
@@ -178,16 +180,34 @@ canvas{width:100%;height:340px;display:block;background:#0e1420;border-radius:10
     return bars.map(function (b) { return { t: b.t, o: -b.o, h: -b.l, l: -b.h, c: -b.c }; });
   }
 
+
+  // last swing low strictly before the spike candle: lower than every bar after it (up to the spike)
+  // and lower than the k bars on its left. Returns {idx, price} or null.
+  function swingLowBefore(bars, s, k, maxBack) {
+    var runMin = bars[s].l, lim = Math.max(k, s - maxBack), p, j, ok, lp;
+    for (p = s - 1; p >= lim; p--) {
+      lp = bars[p].l;
+      if (lp <= runMin) {
+        ok = true;
+        for (j = p - k; j < p; j++) if (bars[j].l <= lp) { ok = false; break; }
+        if (ok) return { idx: p, price: lp };
+        runMin = lp;
+      }
+    }
+    return null;
+  }
+
   /* ---- trade management (buy side; sell side is handled by running on inverted prices) ---- */
 
   function fillEntry(s, bar, i, bars, P) {
     var L = s.level, E = Math.min(L, bar.o), low = L, k;
-    if (P.stopMode !== 'next') for (k = s.spikeIdx; k < i; k++) if (bars[k].l < low) low = bars[k].l;
+    if (P.stopMode === 'swing') low = s.baseLow;
+    else if (P.stopMode !== 'next') for (k = s.spikeIdx; k < i; k++) if (bars[k].l < low) low = bars[k].l;
     var S = low - P.bufferATR * s.atr;
     var R = E - S;
     s.entryIdx = i; s.entryTime = bar.t;
     if (!(R > 0)) { s.state = 'skipped'; s.note = 'gap'; return; }
-    if (R > P.maxRiskATR * s.atr) { s.state = 'skipped'; s.note = 'risk-high'; s.entry = E; s.stop = S; return; }
+    if (P.maxRiskATR > 0 && R > P.maxRiskATR * s.atr) { s.state = 'skipped'; s.note = 'risk-high'; s.entry = E; s.stop = S; return; }
     if (R < P.minRiskATR * s.atr) { s.state = 'skipped'; s.note = 'risk-low'; s.entry = E; s.stop = S; return; }
     s.entry = E; s.stop = S; s.risk = R;
     s.target = E + P.rr * R;
@@ -286,21 +306,23 @@ canvas{width:100%;height:340px;display:block;background:#0e1420;border-radius:10
 
       // spike detection
       if (active || trend !== 1 || !(confirmed || P.allowAfterChoch)) continue;
-      if (i <= armBar || i < warm || !(armed || !P.firstOnly)) continue;
+      if (i < warm || !(armed || !P.firstOnly)) continue;   // the BOS candle itself may be the spike
       var K = -Infinity, kLow = Infinity;
       for (j = i - P.knotBars; j < i; j++) { if (bars[j].h > K) K = bars[j].h; if (bars[j].l < kLow) kLow = bars[j].l; }
       if (!(bar.c > K)) continue;
-      if (P.firstOnly) armed = false;
       var a = atr[i - 1], body = bar.c - bar.o, sumB = 0;
+      if (P.useKnot && !((K - kLow) <= P.knotMaxATR * a)) continue; // not a break of a tight knot: ignore, do not consume
+      if (P.firstOnly) armed = false;
       for (j = i - P.bodyAvgLen; j < i; j++) sumB += Math.abs(bars[j].c - bars[j].o);
       ok = body > 0 && a > 0 &&
         body >= P.bodyVsAvg * (sumB / P.bodyAvgLen) &&
         body >= P.bodyMinATR * a &&
         (bar.h - bar.c) <= P.wickRatio * body &&
-        (bar.o - bar.l) <= P.wickRatio * body &&
-        (!P.useKnot || (K - kLow) <= P.knotMaxATR * a);
+        (bar.o - bar.l) <= P.wickRatio * body;
       if (ok) {
-        active = { dir: 1, spikeIdx: i, spikeTime: bar.t, knotHigh: K, knotLow: kLow, atr: a, bosIdx: armBar, state: 'waitC1' };
+        var base = P.stopMode === 'swing' ? swingLowBefore(bars, i, P.stopSwing, P.stopLookback) : null;
+        active = { dir: 1, spikeIdx: i, spikeTime: bar.t, knotHigh: K, knotLow: kLow, atr: a, bosIdx: armBar, state: 'waitC1',
+          baseIdx: base ? base.idx : null, baseLow: base ? base.price : kLow };
         setups.push(active);
       }
     }
@@ -316,7 +338,7 @@ canvas{width:100%;height:340px;display:block;background:#0e1420;border-radius:10
     return { setups: setups, events: events, trend: trend, confirmed: confirmed, atr: atr };
   }
 
-  var PRICE_FIELDS = ['knotHigh', 'knotLow', 'level', 'entry', 'stop', 'target', 'e2', 'cancelLvl', 'exit'];
+  var PRICE_FIELDS = ['knotHigh', 'knotLow', 'baseLow', 'level', 'entry', 'stop', 'target', 'e2', 'cancelLvl', 'exit'];
   function flipSetup(s) {
     PRICE_FIELDS.forEach(function (f) { if (typeof s[f] === 'number') s[f] = -s[f]; });
     if (s.t2 && typeof s.t2.price === 'number') s.t2.price = -s.t2.price;
@@ -357,7 +379,7 @@ canvas{width:100%;height:340px;display:block;background:#0e1420;border-radius:10
   }
 
   var api = { DEFAULTS: DEFAULTS, run: run, stats: stats, calcATR: calcATR, invertBars: invertBars, merge: merge,
-    _t: { fillEntry: fillEntry, stepOpen: stepOpen, manage: manage } };
+    _t: { fillEntry: fillEntry, stepOpen: stepOpen, manage: manage, swingLowBefore: swingLowBefore } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SetupEngine = api;
 })(typeof window !== 'undefined' ? window : this);
@@ -387,10 +409,12 @@ var PARAM_DEFS = [
  ['bodyMinATR','بدنه اسپایک حداقل (برابر میانگین نوسان)',0.1,4,0.1,'n'],
  ['wickRatio','حداکثر سایه نسبت به بدنه (۰٫۳ یعنی ۳۰ درصد)',0,2,0.05,'n'],
  ['ورود و حد ضرر'],
- ['maxWait','حداکثر کندل انتظار برای برگشت قیمت',1,100,1,'n'],
+ ['maxWait','حداکثر کندل انتظار برای برگشت قیمت (بعد از کندل اول پس از اسپایک)',1,30,1,'n'],
  ['stopMode','جای حد ضرر',0,0,0,'s'],
+ ['stopSwing','حساسیت پیدا کردن آخرین کف یا سقف (تعداد کندل سمت چپ)',2,20,1,'n'],
+ ['stopSwing','حساسیت پیدا کردن کف یا سقف مبدأ (تعداد کندل سمت چپ)',2,15,1,'n'],
  ['bufferATR','فاصله حد ضرر از کف یا سقف (برابر میانگین نوسان)',0,2,0.05,'n'],
- ['maxRiskATR','حداکثر ریسک مجاز (برابر میانگین نوسان)',0.5,30,0.5,'n'],
+ ['maxRiskATR','حداکثر ریسک مجاز (برابر میانگین نوسان، صفر یعنی بدون محدودیت)',0,50,0.5,'n'],
  ['حد سود و ورود دوم'],
  ['rr','حد سود (برابر فاصله حد ضرر)',0.5,10,0.5,'n'],
  ['second','ورود دوم فعال باشد',0,0,0,'b'],
@@ -540,7 +564,7 @@ function fmt(sym,x){return typeof x==='number'?x.toFixed(SYMS[sym].dec):'—';}
 function tm(t){var d=new Date(t);return d.toLocaleDateString('fa-IR',{month:'2-digit',day:'2-digit'})+' '+d.toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'});}
 function rr(x){return '\u200E'+(x>0?'+':'')+x.toFixed(2);}
 var STATE_TXT={waitC1:'منتظر بسته شدن کندل بعد از اسپایک',pending:'منتظر برگشت قیمت به نقطه ورود',open:'معامله باز'};
-var NOTE_TXT={timeout:'منقضی (قیمت برنگشت)','trend-flip':'لغو (تغییر روند)','risk-high':'رد شد (ریسک زیاد)','risk-low':'رد شد (ریسک کم)',gap:'رد شد (شکاف قیمتی)'};
+var NOTE_TXT={timeout:'منقضی (قیمت در سه کندل برنگشت)','trend-flip':'لغو (تغییر روند)','risk-high':'رد شد (ریسک زیاد)','risk-low':'رد شد (ریسک کم)',gap:'رد شد (قیمت زیر کف یا بالای سقف مبدأ رفت)'};
 function statusOf(s){
   if(s.state==='closed')return {t:(s.outcome==='target'?'حد سود':'حد ضرر')+' · '+rr(s.totalR)+' واحد ریسک',c:s.totalR>0?'win':'loss'};
   if(s.state==='open')return {t:'معامله باز · '+rr(s.unrealR||0)+' واحد ریسک',c:'open'};
@@ -604,7 +628,7 @@ function openModal(id){
   var sym=s.sym,d=S.data[s.key];
   $('mTitle').textContent=(s.dir>0?'خرید':'فروش')+' · '+SYMS[sym].name+' · '+TFS[s.tf].label;
   var kv=[['زمان کندل اسپایک',tm(s.spikeTime)],['وضعیت',statusOf(s).t],['سطح ورود (کف یا سقف کندل بعد از اسپایک)',fmt(sym,s.level)]];
-  if(typeof s.entry==='number')kv.push(['ورود اول',fmt(sym,s.entry)+' · '+tm(s.entryTime)],['حد ضرر',fmt(sym,s.stop)],['حد سود',fmt(sym,s.target)],['فاصله ریسک',fmt(sym,s.risk)],['ورود دوم',fmt(sym,s.e2)+' · '+t2txt(s)]);
+  if(typeof s.entry==='number')kv.push(['مبدأ حرکت (حد ضرر پشت آن)',fmt(sym,s.baseLow)],['ورود اول',fmt(sym,s.entry)+' · '+tm(s.entryTime)],['حد ضرر',fmt(sym,s.stop)],['حد سود',fmt(sym,s.target)],['فاصله ریسک',fmt(sym,s.risk)],['ورود دوم',fmt(sym,s.e2)+' · '+t2txt(s)]);
   if(s.state==='closed')kv.push(['خروج',fmt(sym,s.exit)+' · '+tm(s.exitTime)],['نتیجه معامله اول',rr(s.r1)],['نتیجه معامله دوم',rr(s.r2)],['نتیجه کل (واحد ریسک)',rr(s.totalR)]);
   $('mKv').innerHTML=kv.map(function(x){return '<div><span>'+x[0]+'</span>'+x[1]+'</div>';}).join('');
   $('modal').style.display='block'; document.body.style.overflow='hidden';
@@ -614,8 +638,9 @@ function drawChart(cv,bars,s,events,sym){
   var dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight; cv.width=W*dpr; cv.height=H*dpr;
   var x=cv.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,W,H);
   var end=s.exitIdx!=null?s.exitIdx:bars.length-1;
-  var a=Math.max(0,s.spikeIdx-14),b=Math.min(bars.length-1,end+10); if(b-a<36)b=Math.min(bars.length-1,a+36);
-  var lv=[s.entry,s.stop,s.target,s.e2,s.level].filter(function(v){return typeof v==='number';});
+  var a0=s.spikeIdx-14; if(s.baseIdx!=null)a0=Math.min(a0,s.baseIdx-4); a0=Math.max(a0,s.spikeIdx-90);
+  var a=Math.max(0,a0),b=Math.min(bars.length-1,end+10); if(b-a<36)b=Math.min(bars.length-1,a+36);
+  var lv=[s.entry,s.stop,s.target,s.e2,s.level,s.baseLow].filter(function(v){return typeof v==='number';});
   var lo=Math.min.apply(null,lv),hi=Math.max.apply(null,lv),pd=Math.max((hi-lo)*0.7,s.atr*1.5);
   var mn=lo-pd,mx=hi+pd,i;
   var L=6,R=92,T=10,B=22,pw=W-L-R,ph=H-T-B,n=b-a+1,step=pw/n;
@@ -663,7 +688,9 @@ function drawChart(cv,bars,s,events,sym){
   // markers
   function mark(idx,txt,col,above){if(idx==null||idx<a||idx>b)return;var yy=above?Y(bars[idx].h)-10:Y(bars[idx].l)+11;yy=Math.max(T+8,Math.min(T+ph-8,yy));x.fillStyle=col;x.textAlign='center';x.fillText(txt,X(idx),yy);}
   var buy=s.dir>0;
+  if(s.baseIdx!=null)mark(s.baseIdx,buy?'کف مبدأ':'سقف مبدأ','#94a3b8',!buy);
   mark(s.spikeIdx,'اسپایک','#f59e0b',buy);
+  if(s.baseIdx!=null)mark(s.baseIdx,buy?'کف مبدأ':'سقف مبدأ','#94a3b8',!buy);
   mark(s.entryIdx,'ورود','#60a5fa',!buy);
   if(s.t2&&s.t2.idx!=null)mark(s.t2.idx,'ورود دوم','#a78bfa',!buy);
   if(s.exitIdx!=null)mark(s.exitIdx,s.outcome==='target'?'سود':'ضرر',s.outcome==='target'?'#22c55e':'#ef4444',buy);
@@ -683,7 +710,7 @@ function buildParams(){
     if(d.length===1){h+='</div><div class="grp">'+d[0]+'</div><div class="grid">';return;}
     var k=d[0],v=P(k);
     if(d[5]==='b')h+='<label class="chk"><input type="checkbox" data-p="'+k+'"'+(v?' checked':'')+'><span>'+d[1]+'</span></label>';
-    else if(d[5]==='s')h+='<div><div class="lbl">'+d[1]+'</div><select data-p="'+k+'"><option value="spike"'+(v==='spike'?' selected':'')+'>کف اسپایک تا لحظه ورود</option><option value="next"'+(v==='next'?' selected':'')+'>کف کندل بعد از اسپایک (بسیار تنگ)</option></select></div>';
+    else if(d[5]==='s')h+='<div><div class="lbl">'+d[1]+'</div><select data-p="'+k+'"><option value="swing"'+(v==='swing'?' selected':'')+'>پشت آخرین کف (برای فروش سقف) قبل از کندل اسپایک</option><option value="swing"'+(v==='swing'?' selected':'')+'>پشت آخرین کف (برای فروش: سقف) قبل از کندل اسپایک</option><option value="spike"'+(v==='spike'?' selected':'')+'>کف اسپایک تا لحظه ورود</option><option value="next"'+(v==='next'?' selected':'')+'>کف کندل بعد از اسپایک (بسیار تنگ)</option></select></div>';
     else h+='<div><div class="lbl">'+d[1]+'</div><input type="number" data-p="'+k+'" value="'+v+'" min="'+d[2]+'" max="'+d[3]+'" step="'+d[4]+'" inputmode="decimal"></div>';
   });
   $('advBody').innerHTML=h+'</div>';

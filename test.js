@@ -4,7 +4,7 @@ const eq = (name, a, b, tol = 1e-9) => {
   const ok = typeof a === 'number' ? Math.abs(a - b) < tol : a === b;
   if (!ok) { fails++; console.log('FAIL', name, 'got', a, 'expected', b); } else console.log('ok  ', name);
 };
-const P = E.merge({});
+const P = E.merge({stopMode:'spike'});
 function mk(){ // pending setup, spike bar0 low 98.5, C1 low 100
   const bars=[{t:0,o:99,h:101,l:98.5,c:100.8},{t:1,o:100.8,h:101.5,l:100,c:101}];
   const s={level:100,spikeIdx:0,atr:1,state:'pending',dir:1};
@@ -41,6 +41,51 @@ E._t.stepOpen(s,{t:3,o:98,h:98.5,l:97.5,c:98},3); eq('case7 gap exit',s.exit,98)
 
 s=enter({t:2,o:99.8,h:100.5,l:99.5,c:100});  // gap open below level -> filled at open 99.8
 eq('case8 fill at open',s.entry,99.8); eq('case8 stop kept',s.stop,98.4,1e-9);
+
+
+// ---------- stop behind the last swing low before the spike ----------
+const lowsToBars = (lows)=>lows.map((l,i)=>({t:i,o:l+1,h:l+2,l,c:l+1}));
+let r = E._t.swingLowBefore(lowsToBars([10,9,8,7,6,5,6,7,6.5,7.5]), 9, 3, 60);
+eq('swing low: base of the leg idx', r && r.idx, 5); eq('swing low: base price', r && r.price, 5);
+r = E._t.swingLowBefore(lowsToBars([10,10,10,10,10,9,8,7,9]), 8, 3, 60);
+eq('swing low: trough right before spike idx', r && r.idx, 7);
+// full flow on a hand-made series, buy side
+{
+  const B=[]; let t=0; const add=(o,h,l,c)=>B.push({t:t++,o,h,l,c});
+  const ramp=(from,to,n)=>{ for(let i=0;i<n;i++){ const o=from+(to-from)*i/n, c=from+(to-from)*(i+1)/n; add(o,Math.max(o,c)+0.15,Math.min(o,c)-0.15,c);} };
+  for(let i=0;i<30;i++) add(100,100.6,99.4,100.2-(i%2)*0.4);   // quiet noise
+  ramp(100,95,5); ramp(95,101.5,7);                            // dip, then first break up (CHoCH)
+  ramp(101.5,99.5,4); ramp(99.5,103,6);                        // pullback, new high 103
+  ramp(103,101.5,4); ramp(101.5,104.5,5);                      // pullback, break of 103 (BOS)
+  for(let i=0;i<8;i++) add(104.3,104.7,104.0,104.4+(i%2)*0.1); // knot
+  add(104.4,108.6,104.3,108.5);                                // spike: big body, tiny wicks
+  add(108.5,109.5,107.4,109);                                  // C1, low 107.4
+  add(109,109.2,107.3,108);                                    // back to C1 low -> entry
+  add(108,108.5,107.5,108.2); add(108.2,111,108,110.9);
+  const res=E.run(B,{swing:3,knotBars:6,atrLen:5,bodyAvgLen:5,maxRiskATR:0});
+  const b=res.setups.filter(x=>x.dir===1);
+  console.log('hand-made flow:', b.map(x=>({spike:x.spikeIdx,base:x.baseIdx,baseLow:+x.baseLow.toFixed(2),entry:x.entry,stop:+(x.stop||0).toFixed(3),target:+(x.target||0).toFixed(3),state:x.state,total:x.totalR})));
+  eq('hand-made: a buy setup is found', b.length>=1, true);
+  if(b.length){ const x=b[0];
+    eq('hand-made: base found and before spike', x.baseIdx!==null && x.baseIdx<x.spikeIdx, true);
+    eq('hand-made: stop = base low - 0.1 ATR', x.stop, x.baseLow-0.1*x.atr, 1e-9);
+    eq('hand-made: entry = low of candle after spike', x.entry, 107.4, 1e-9);
+    eq('hand-made: 1:1 target', x.target-x.entry, x.entry-x.stop, 1e-9); }
+}
+
+
+// ---------- waiting window: 3 candles after the first candle ----------
+{
+  const PP=E.merge({stopMode:'spike'});
+  const miss={o:102,h:103,l:101,c:102.5}, hit={o:102,h:102.2,l:99.9,c:100.5};
+  const mkS=()=>({level:100,spikeIdx:0,atr:1,state:'pending',dir:1,wait:0,baseLow:98});
+  const run=(seq)=>{ const bars=[{t:0,o:99,h:101,l:98.5,c:100.8},{t:1,o:100.8,h:101.5,l:100,c:101}]; const s=mkS();
+    seq.forEach((b,k)=>{ if(s.state!=='pending')return; const bar=Object.assign({t:2+k},b); bars.push(bar); E._t.manage(s,bar,2+k,true,bars,PP); }); return s.state; };
+  eq('wait: hit on 3rd waiting candle -> entry', run([miss,miss,hit]), 'open');
+  eq('wait: no hit in 3 candles -> expired', run([miss,miss,miss]), 'expired');
+  eq('wait: hit only on 4th candle is too late', run([miss,miss,miss,hit]), 'expired');
+}
+
 
 // ---------- integration ----------
 function rng(seed){ return () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296; }

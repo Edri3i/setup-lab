@@ -7,18 +7,20 @@
     allowAfterChoch: false, // allow setups after a CHoCH (before a BOS confirms the trend)
     knotBars: 8,         // number of bars that make the "knot" (consolidation) before the spike
     useKnot: true,       // require the knot to be tight
-    knotMaxATR: 5,       // max knot height in ATR
+    knotMaxATR: 3,       // max knot height in ATR
     atrLen: 14,
     bodyAvgLen: 10,
     bodyVsAvg: 1.3,      // spike body >= this x average body
     bodyMinATR: 0.8,     // spike body >= this x ATR
     wickRatio: 0.3,      // each wick <= this x body
     firstOnly: true,     // only the first break after a BOS is a candidate
-    maxWait: 12,         // bars to wait for price to come back to entry level
-    stopMode: 'spike',   // 'spike' = behind lowest low from spike candle to entry, 'next' = behind low of candle after spike
+    maxWait: 3,          // candles (after the first candle following the spike) in which price may come back to the entry level
+    stopMode: 'swing',   // 'swing' = behind the last swing low before the spike candle (origin of the move), 'spike' = behind lowest low from spike to entry, 'next' = behind low of candle after spike
+    stopSwing: 5,        // bars on the left a swing low must be lower than
+    stopLookback: 60,    // how far back to look for that swing low
     bufferATR: 0.1,      // stop buffer in ATR
     minRiskATR: 0,
-    maxRiskATR: 4,
+    maxRiskATR: 15,      // 0 = no limit
     rr: 1,               // target = rr x risk (1 = 1:1)
     second: true,        // second entry enabled
     e2Frac: 0.5,         // second entry at this fraction of the stop distance
@@ -49,16 +51,34 @@
     return bars.map(function (b) { return { t: b.t, o: -b.o, h: -b.l, l: -b.h, c: -b.c }; });
   }
 
+
+  // last swing low strictly before the spike candle: lower than every bar after it (up to the spike)
+  // and lower than the k bars on its left. Returns {idx, price} or null.
+  function swingLowBefore(bars, s, k, maxBack) {
+    var runMin = bars[s].l, lim = Math.max(k, s - maxBack), p, j, ok, lp;
+    for (p = s - 1; p >= lim; p--) {
+      lp = bars[p].l;
+      if (lp <= runMin) {
+        ok = true;
+        for (j = p - k; j < p; j++) if (bars[j].l <= lp) { ok = false; break; }
+        if (ok) return { idx: p, price: lp };
+        runMin = lp;
+      }
+    }
+    return null;
+  }
+
   /* ---- trade management (buy side; sell side is handled by running on inverted prices) ---- */
 
   function fillEntry(s, bar, i, bars, P) {
     var L = s.level, E = Math.min(L, bar.o), low = L, k;
-    if (P.stopMode !== 'next') for (k = s.spikeIdx; k < i; k++) if (bars[k].l < low) low = bars[k].l;
+    if (P.stopMode === 'swing') low = s.baseLow;
+    else if (P.stopMode !== 'next') for (k = s.spikeIdx; k < i; k++) if (bars[k].l < low) low = bars[k].l;
     var S = low - P.bufferATR * s.atr;
     var R = E - S;
     s.entryIdx = i; s.entryTime = bar.t;
     if (!(R > 0)) { s.state = 'skipped'; s.note = 'gap'; return; }
-    if (R > P.maxRiskATR * s.atr) { s.state = 'skipped'; s.note = 'risk-high'; s.entry = E; s.stop = S; return; }
+    if (P.maxRiskATR > 0 && R > P.maxRiskATR * s.atr) { s.state = 'skipped'; s.note = 'risk-high'; s.entry = E; s.stop = S; return; }
     if (R < P.minRiskATR * s.atr) { s.state = 'skipped'; s.note = 'risk-low'; s.entry = E; s.stop = S; return; }
     s.entry = E; s.stop = S; s.risk = R;
     s.target = E + P.rr * R;
@@ -157,21 +177,23 @@
 
       // spike detection
       if (active || trend !== 1 || !(confirmed || P.allowAfterChoch)) continue;
-      if (i <= armBar || i < warm || !(armed || !P.firstOnly)) continue;
+      if (i < warm || !(armed || !P.firstOnly)) continue;   // the BOS candle itself may be the spike
       var K = -Infinity, kLow = Infinity;
       for (j = i - P.knotBars; j < i; j++) { if (bars[j].h > K) K = bars[j].h; if (bars[j].l < kLow) kLow = bars[j].l; }
       if (!(bar.c > K)) continue;
-      if (P.firstOnly) armed = false;
       var a = atr[i - 1], body = bar.c - bar.o, sumB = 0;
+      if (P.useKnot && !((K - kLow) <= P.knotMaxATR * a)) continue; // not a break of a tight knot: ignore, do not consume
+      if (P.firstOnly) armed = false;
       for (j = i - P.bodyAvgLen; j < i; j++) sumB += Math.abs(bars[j].c - bars[j].o);
       ok = body > 0 && a > 0 &&
         body >= P.bodyVsAvg * (sumB / P.bodyAvgLen) &&
         body >= P.bodyMinATR * a &&
         (bar.h - bar.c) <= P.wickRatio * body &&
-        (bar.o - bar.l) <= P.wickRatio * body &&
-        (!P.useKnot || (K - kLow) <= P.knotMaxATR * a);
+        (bar.o - bar.l) <= P.wickRatio * body;
       if (ok) {
-        active = { dir: 1, spikeIdx: i, spikeTime: bar.t, knotHigh: K, knotLow: kLow, atr: a, bosIdx: armBar, state: 'waitC1' };
+        var base = P.stopMode === 'swing' ? swingLowBefore(bars, i, P.stopSwing, P.stopLookback) : null;
+        active = { dir: 1, spikeIdx: i, spikeTime: bar.t, knotHigh: K, knotLow: kLow, atr: a, bosIdx: armBar, state: 'waitC1',
+          baseIdx: base ? base.idx : null, baseLow: base ? base.price : kLow };
         setups.push(active);
       }
     }
@@ -187,7 +209,7 @@
     return { setups: setups, events: events, trend: trend, confirmed: confirmed, atr: atr };
   }
 
-  var PRICE_FIELDS = ['knotHigh', 'knotLow', 'level', 'entry', 'stop', 'target', 'e2', 'cancelLvl', 'exit'];
+  var PRICE_FIELDS = ['knotHigh', 'knotLow', 'baseLow', 'level', 'entry', 'stop', 'target', 'e2', 'cancelLvl', 'exit'];
   function flipSetup(s) {
     PRICE_FIELDS.forEach(function (f) { if (typeof s[f] === 'number') s[f] = -s[f]; });
     if (s.t2 && typeof s.t2.price === 'number') s.t2.price = -s.t2.price;
@@ -228,7 +250,7 @@
   }
 
   var api = { DEFAULTS: DEFAULTS, run: run, stats: stats, calcATR: calcATR, invertBars: invertBars, merge: merge,
-    _t: { fillEntry: fillEntry, stepOpen: stepOpen, manage: manage } };
+    _t: { fillEntry: fillEntry, stepOpen: stepOpen, manage: manage, swingLowBefore: swingLowBefore } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SetupEngine = api;
 })(typeof window !== 'undefined' ? window : this);
