@@ -76,7 +76,7 @@ tr.sel{background:#3a2f12!important}
       <button id="btnDl">دانلود از بایننس</button>
       <button class="sec" id="btnCancel" style="display:none">لغو</button>
       <span style="color:var(--mut)">یا</span>
-      <input type="file" id="csvFile" accept=".csv,.txt" style="max-width:260px">
+      <input type="file" id="csvFile" accept=".csv,.txt,.xlsx" style="max-width:260px">
       <div class="fld" style="min-width:210px"><input type="text" id="csvTz" value="UTC" list="tzlist" data-save dir="ltr" title="منطقه زمانی ستون ساعت فایل CSV"></div>
       <span class="hint" style="font-size:11px;color:var(--mut)">منطقه زمانی فایل CSV</span>
       <datalist id="tzlist"><option value="UTC"><option value="Asia/Tehran"><option value="America/New_York"><option value="Europe/London"><option value="Europe/Athens"><option value="Asia/Dubai"></datalist>
@@ -84,7 +84,7 @@ tr.sel{background:#3a2f12!important}
     <div class="bar" id="pbar" style="display:none"><i id="pfill"></i></div>
     <div id="status"></div>
     <div id="dsinfo" style="margin-top:8px"></div>
-    <div class="note">بایننس شنبه و یکشنبه هم معامله می‌شود (حجم کم) ولی بازار فارکس تعطیل است، پس نتیجه با چارت بروکر کمی فرق دارد. فایل CSV با ستون‌های تاریخ، ساعت، باز، بالا، پایین، بسته، حجم (مثل خروجی FXCM) یا ستون زمان عددی (میلی‌ثانیه) پذیرفته می‌شود.</div>
+    <div class="note">بایننس شنبه و یکشنبه هم معامله می‌شود (حجم کم) ولی بازار فارکس تعطیل است، پس نتیجه با چارت بروکر کمی فرق دارد. فایل CSV یا اکسل (xlsx) با ستون‌های تاریخ، ساعت، باز، بالا، پایین، بسته، حجم (مثل خروجی FXCM) یا ستون زمان عددی (میلی‌ثانیه) پذیرفته می‌شود.</div>
   </div>
 
   <!-- ───────── تنظیمات ───────── -->
@@ -536,6 +536,57 @@ function parseCSV(text,tz){
   return rows;
 }
 
+/* ───────── خواندن فایل اکسل (xlsx) ───────── */
+// ==XLSX_START==
+async function unzipXlsx(buf){
+  const u8=new Uint8Array(buf), dv=new DataView(buf); let e=u8.length-22;
+  while(e>=0&&dv.getUint32(e,true)!==0x06054b50) e--;
+  if(e<0) throw new Error("فایل xlsx معتبر نیست.");
+  const cnt=dv.getUint16(e+10,true); let p=dv.getUint32(e+16,true); const files={}, dec=new TextDecoder();
+  for(let i=0;i<cnt;i++){
+    const method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true), nl=dv.getUint16(p+28,true), xl=dv.getUint16(p+30,true), cl=dv.getUint16(p+32,true), lho=dv.getUint32(p+42,true);
+    files[dec.decode(u8.slice(p+46,p+46+nl))]={method,csize,lho}; p+=46+nl+xl+cl;
+  }
+  return async name=>{
+    const f=files[name]; if(!f) return null; const lp=f.lho, st=lp+30+dv.getUint16(lp+26,true)+dv.getUint16(lp+28,true);
+    const data=u8.slice(st,st+f.csize); if(f.method===0) return dec.decode(data);
+    if(f.method!==8) throw new Error("نوع فشرده‌سازی فایل پشتیبانی نمی‌شود.");
+    const out=await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+    return dec.decode(out);
+  };
+}
+function xmlText(x){ return x.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,"&"); }
+function colIdx(ref){ const m=ref.match(/^([A-Z]+)/); let n=0; for(const ch of m[1]) n=n*26+ch.charCodeAt(0)-64; return n-1; }
+function serialToStr(v){
+  const sec=Math.round((v-25569)*86400), d=new Date(sec*1000), z=n=>String(n).padStart(2,"0");
+  return `${d.getUTCFullYear()}-${z(d.getUTCMonth()+1)}-${z(d.getUTCDate())} ${z(d.getUTCHours())}:${z(d.getUTCMinutes())}:${z(d.getUTCSeconds())}`;
+}
+async function xlsxToCSV(buf){
+  const get=await unzipXlsx(buf);
+  let names=[]; for(let i=1;i<=20;i++){ if(await get(`xl/worksheets/sheet${i}.xml`)!==null){ names.push(i); break; } }
+  if(!names.length) throw new Error("برگه‌ای در فایل پیدا نشد.");
+  const ssx=await get("xl/sharedStrings.xml"), sst=[];
+  if(ssx) for(const m of ssx.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)){ let t=""; for(const q of m[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)) t+=q[1]; sst.push(xmlText(t)); }
+  const sh=await get(`xl/worksheets/sheet${names[0]}.xml`), lines=[];
+  for(const rm of sh.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)){
+    const row=[];
+    for(const cm of rm[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
+      const at=cm[1], ref=(at.match(/\br="([^"]+)"/)||[])[1]; if(!ref) continue; const t=(at.match(/\bt="([^"]+)"/)||[])[1], body=cm[2]||"";
+      let val=""; const vm=body.match(/<v>([\s\S]*?)<\/v>/);
+      if(t==="s"&&vm) val=sst[+vm[1]]||""; else if(t==="inlineStr"){ for(const q of body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)) val+=xmlText(q[1]); }
+      else if(vm) val=xmlText(vm[1]);
+      const ci=colIdx(ref); while(row.length<ci) row.push(""); row[ci]=(t==="s"||t==="inlineStr"||t==="str")?val:val.trim();
+      // ستون اول و دوم: تاریخ و ساعت اکسل به متن تبدیل می‌شوند
+      if(ci<2&&(!t||t==="n")&&val!==""&&isFinite(+val)){ const x=+val;
+        if(x>=25569&&x<80000) row[ci]=(Number.isInteger(x)&&ci===0)?serialToStr(x).slice(0,10):serialToStr(x);
+        else if(x>0&&x<1) row[ci]=serialToStr(25569+x).slice(11); }
+    }
+    if(row.length) lines.push(row.join(","));
+  }
+  return lines.join("\n");
+}
+// ==XLSX_END==
+
 /* ───────── مجموعه داده ───────── */
 const DS={}; // کلید: تایم‌فریم به دقیقه
 function makeDS(rows,tfMin,derived){
@@ -618,7 +669,8 @@ $("csvFile").onchange=async e=>{
   setStatus("در حال خواندن فایل...");
   await new Promise(r=>setTimeout(r,30));
   try{
-    const rows=parseCSV(await f.text(),tz); if(rows.length<50) throw new Error("ردیف معتبر کافی در فایل پیدا نشد.");
+    const isX=/\.xlsx$/i.test(f.name); if(/\.xls$/i.test(f.name)) throw new Error("فرمت xls قدیمی پشتیبانی نمی‌شود. در اکسل با Save As به xlsx یا CSV تبدیلش کن.");
+    const rows=parseCSV(isX?await xlsxToCSV(await f.arrayBuffer()):await f.text(),tz); if(rows.length<50) throw new Error("ردیف معتبر کافی در فایل پیدا نشد.");
     rows.sort((a,b)=>a[0]-b[0]); const dl=[]; for(let i=1;i<Math.min(rows.length,5000);i++){ const dx=rows[i][0]-rows[i-1][0]; if(dx>0) dl.push(dx); }
     dl.sort((a,b)=>a-b); const tf=Math.max(1,Math.round(dl[Math.floor(dl.length/2)]/60000));
     Object.keys(DS).forEach(k=>delete DS[k]); DS[tf]=makeDS(rows,tf,false);
