@@ -694,7 +694,7 @@ class PriceChart{
   zoomAt(x,f){ const pw=this.w-64, bw=pw/this.vis, idx=this.start+x/bw; this.vis=Math.min(Math.max(this.vis*f,15),Math.max(60,this.D.t.length*1.2)); this.start=idx-x/(pw/this.vis); this.clamp(); this.draw(); }
   pan(bars){ this.start+=bars; this.clamp(); this.draw(); }
   focus(tr){
-    const span=Math.max(40,(tr.exitBar>=0?tr.exitBar:this.D.t.length-1)-tr.setupBar); this.vis=Math.min(Math.max(span*2.4,60),Math.max(60,this.D.t.length));
+    const span=Math.max(40,(tr.exitBar>=0?tr.exitBar:this.D.t.length-1)-tr.setupBar); this.vis=Math.min(Math.max(span*2.4,60),Math.max(60,this.D.t.length),500);
     this.start=tr.setupBar-this.vis*.25; this.clamp(); this.draw();
   }
   attach(){
@@ -744,7 +744,14 @@ class PriceChart{
         ctx.beginPath(); ctx.moveTo(Math.round(x)+.5,Y(D.h[i])); ctx.lineTo(Math.round(x)+.5,Y(D.l[i])); ctx.stroke();
         const yo=Y(D.o[i]),yc=Y(D.c[i]); ctx.fillRect(Math.round(x-bwid/2),Math.min(yo,yc),bwid,Math.max(1,Math.abs(yc-yo))); }
     } else {
-      ctx.strokeStyle="#9fb3c8"; ctx.beginPath(); for(let i=i0;i<=i1;i++){ const x=X(i),y=Y(D.c[i]); if(i===i0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.stroke();
+      // بزرگ‌نمایی کم: چند کندل کنار هم در یک ستون پیکسلی به یک کندل ترکیبی تبدیل می‌شود
+      const per=Math.max(1,Math.ceil(3/bw)), cw=Math.max(1.5,per*bw*.8);
+      for(let g=Math.floor(i0/per)*per;g<=i1;g+=per){
+        const e=Math.min(n-1,g+per-1); let hh=-Infinity,ll=Infinity; for(let i=Math.max(g,0);i<=e;i++){ if(D.h[i]>hh) hh=D.h[i]; if(D.l[i]<ll) ll=D.l[i]; }
+        const op=D.o[Math.max(g,0)], cl=D.c[e], up=cl>=op, x=(X(g)+X(e))/2;
+        ctx.fillStyle=ctx.strokeStyle=up?COL.up:COL.dn; ctx.beginPath(); ctx.moveTo(Math.round(x)+.5,Y(hh)); ctx.lineTo(Math.round(x)+.5,Y(ll)); ctx.stroke();
+        const yo=Y(op),yc=Y(cl); ctx.fillRect(x-cw/2,Math.min(yo,yc),cw,Math.max(1,Math.abs(yc-yo)));
+      }
     }
     // ساختار (اختیاری)
     if(this.opt.bos){ ctx.font="10px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="bottom"; ctx.lineWidth=1;
