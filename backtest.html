@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>بک‌تست اسپایک BOS</title>
+<style>
+:root{--bg:#0e1116;--card:#161b22;--card2:#1c232d;--line:#2a313c;--tx:#e6edf3;--mut:#8b949e;--g:#26a69a;--r:#ef5350;--acc:#f0a63a;--blue:#58a6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.7 Tahoma,"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:12px}
+h1{font-size:21px;margin:4px 0 0}
+.by{direction:ltr;text-align:right;color:var(--acc);font-size:13px;font-family:Segoe UI,Arial,sans-serif;letter-spacing:.3px}
+.sub{color:var(--mut);font-size:12.5px;margin:2px 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.card>h2{font-size:15px;margin:0 0 8px;color:var(--blue)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px 12px}
+.grp{grid-column:1/-1;margin:8px 0 0;padding-top:6px;border-top:1px dashed var(--line);color:var(--acc);font-weight:bold;font-size:13px}
+.grp:first-child{border-top:0;margin-top:0}
+.fld{display:flex;flex-direction:column;gap:2px}
+.fld label{font-size:12.5px}
+.fld .hint{font-size:11px;color:var(--mut);line-height:1.5}
+input,select,button{font:inherit;color:var(--tx)}
+input[type=number],input[type=text],input[type=date],select{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;width:100%}
+input[type=checkbox]{width:18px;height:18px;vertical-align:middle;margin-left:6px}
+.chk{display:flex;align-items:center}
+button{background:#238636;border:0;border-radius:7px;padding:8px 14px;cursor:pointer}
+button.sec{background:#30363d}
+button.warn{background:#9a6700}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.stat{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.stat b{display:block;font-size:16px;direction:ltr;text-align:right}
+.stat span{font-size:11.5px;color:var(--mut)}
+.pos{color:var(--g)}.neg{color:var(--r)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:4px 7px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:center}
+th{position:sticky;top:0;background:var(--card2);color:var(--mut);font-weight:normal}
+td.l{direction:ltr}
+tr.tr{cursor:pointer}
+tr.tr:hover{background:#1f2937}
+tr.sel{background:#3a2f12!important}
+.scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.cv{width:100%;display:block;background:#0b0e13;border:1px solid var(--line);border-radius:8px;direction:ltr;touch-action:none}
+#info{direction:ltr;font-size:12px;color:var(--mut);min-height:20px;font-family:Consolas,monospace}
+#status{font-size:12.5px;color:var(--mut);margin-top:6px;white-space:pre-wrap}
+#status.err{color:var(--r)}
+.note{font-size:12px;color:var(--mut);background:var(--card2);border-radius:8px;padding:8px 10px;margin-top:8px}
+.tag{display:inline-block;border-radius:4px;padding:0 6px;font-size:11.5px}
+.buy{background:rgba(38,166,154,.2);color:var(--g)}.sell{background:rgba(239,83,80,.2);color:var(--r)}
+.bar{height:8px;background:var(--card2);border-radius:5px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:var(--g)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="by">Written by Ali Edrisi</div>
+  <h1>بک‌تست اندیکاتور اسپایک (شکست ساختار + پولبک)</h1>
+  <div class="sub">همه چیز شبیه‌سازی است و سفارش واقعی ثبت نمی‌شود. منطق این صفحه کندل به کندل از روی کد اندیکاتور پاین نوشته شده است.</div>
+
+  <!-- ───────── داده ───────── -->
+  <div class="card">
+    <h2>۱) داده بازار</h2>
+    <div class="grid">
+      <div class="fld"><label>نماد بایننس</label><input type="text" id="symbol" value="EURUSDT" list="symlist" data-save dir="ltr">
+        <datalist id="symlist"><option value="EURUSDT"><option value="EURUSDC"><option value="PAXGUSDT"><option value="XAUTUSDT"><option value="GBPUSDT"><option value="BTCUSDT"></datalist>
+        <div class="hint">بایننس جفت یورو دلار با نام EURUSDT دارد (یورو در برابر تتر). جفت EURUSD خالص در بایننس وجود ندارد.</div></div>
+      <div class="fld"><label>از تاریخ (UTC)</label><input type="date" id="dFrom" data-save></div>
+      <div class="fld"><label>تا تاریخ (UTC)</label><input type="date" id="dTo" data-save></div>
+      <div class="fld"><label>تایم‌فریم‌هایی که دانلود شوند</label>
+        <div class="row"><label class="chk"><input type="checkbox" id="dl1" checked data-save>۱ دقیقه</label><label class="chk"><input type="checkbox" id="dl5" data-save>۵ دقیقه</label><label class="chk"><input type="checkbox" id="dl15" data-save>۱۵ دقیقه</label></div>
+        <div class="hint">اگر فقط ۱ دقیقه را دانلود کنی، ۵ و ۱۵ دقیقه از روی آن ساخته می‌شود.</div></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btnDl">دانلود از بایننس</button>
+      <button class="sec" id="btnCancel" style="display:none">لغو</button>
+      <span style="color:var(--mut)">یا</span>
+      <input type="file" id="csvFile" accept=".csv,.txt" style="max-width:260px">
+      <div class="fld" style="min-width:210px"><input type="text" id="csvTz" value="UTC" list="tzlist" data-save dir="ltr" title="منطقه زمانی ستون ساعت فایل CSV"></div>
+      <span class="hint" style="font-size:11px;color:var(--mut)">منطقه زمانی فایل CSV</span>
+      <datalist id="tzlist"><option value="UTC"><option value="Asia/Tehran"><option value="America/New_York"><option value="Europe/London"><option value="Europe/Athens"><option value="Asia/Dubai"></datalist>
+    </div>
+    <div class="bar" id="pbar" style="display:none"><i id="pfill"></i></div>
+    <div id="status"></div>
+    <div id="dsinfo" style="margin-top:8px"></div>
+    <div class="note">بایننس شنبه و یکشنبه هم معامله می‌شود (حجم کم) ولی بازار فارکس تعطیل است، پس نتیجه با چارت بروکر کمی فرق دارد. فایل CSV با ستون‌های تاریخ، ساعت، باز، بالا، پایین، بسته، حجم (مثل خروجی FXCM) یا ستون زمان عددی (میلی‌ثانیه) پذیرفته می‌شود.</div>
+  </div>
+
+  <!-- ───────── تنظیمات ───────── -->
+  <div class="card">
+    <h2>۲) تنظیمات اندیکاتور</h2>
+    <div class="grid" id="params"></div>
+    <div class="row" style="margin-top:10px"><button class="sec" id="btnReset">بازگشت به مقادیر پیش‌فرض</button><span class="hint" style="font-size:11px;color:var(--mut)">تنظیمات به‌صورت خودکار در همین مرورگر ذخیره می‌شود.</span></div>
+  </div>
+
+  <!-- ───────── ریسک ───────── -->
+  <div class="card">
+    <h2>۳) مدیریت ریسک و محاسبه سود و زیان</h2>
+    <div class="grid">
+      <div class="fld"><label>نوع ریسک هر معامله</label><select id="riskMode" data-save><option value="fixed">مبلغ ثابت</option><option value="pct">درصد از موجودی</option></select></div>
+      <div class="fld" id="fRiskAmt"><label>مبلغ ریسک هر معامله</label><input type="number" id="riskAmt" value="10" min="0" step="any" data-save><div class="hint">اگر ورود اول به حد ضرر بخورد همین مبلغ از دست می‌رود (یک R).</div></div>
+      <div class="fld" id="fRiskPct"><label>درصد ریسک هر معامله</label><input type="number" id="riskPct" value="1" min="0" step="0.1" data-save></div>
+      <div class="fld"><label>موجودی اولیه</label><input type="number" id="balance" value="1000" min="1" step="any" data-save></div>
+      <div class="fld chk" style="align-self:end"><label class="chk"><input type="checkbox" id="compound" data-save>ریسک درصدی روی موجودی لحظه‌ای (مرکب)</label></div>
+      <div class="fld"><label>اندازه یک لات (واحد ارز پایه)</label><input type="number" id="contract" value="100000" min="1" data-save><div class="hint">فقط برای نمایش حجم بر حسب لات.</div></div>
+      <div class="fld"><label>نماد پول</label><input type="text" id="cur" value="$" data-save style="max-width:90px"></div>
+      <div class="fld"><label>اندازه یک تیک قیمت (خالی یا صفر = تشخیص خودکار)</label><input type="number" id="mintick" value="" min="0" step="any" data-save placeholder="خودکار">
+        <div class="hint" id="tickHint"></div></div>
+      <div class="fld"><label>منطقه زمانی نمایش ساعت‌ها</label><input type="text" id="dispTz" value="Asia/Tehran" list="tzlist" data-save dir="ltr"></div>
+    </div>
+    <div class="note">حجم هر معامله = مبلغ ریسک تقسیم بر فاصله ورود تا حد ضرر. ورود دوم هم‌حجم ورود اول است، مثل شبیه‌ساز اندیکاتور. برای جفت‌ارزهایی که ارز دوم آن‌ها دلار نیست، تبدیل ارز لحاظ نشده است.</div>
+  </div>
+
+  <!-- ───────── اجرا ───────── -->
+  <div class="card">
+    <h2>۴) اجرا</h2>
+    <div class="row">
+      <div class="fld" style="min-width:140px"><label>تایم‌فریم</label><select id="tfSel"><option value="1">۱ دقیقه</option><option value="5">۵ دقیقه</option><option value="15">۱۵ دقیقه</option></select></div>
+      <button id="btnRun" style="align-self:end">اجرای بک‌تست</button>
+      <button class="warn" id="btnCmp" style="align-self:end">مقایسه ۱ و ۵ و ۱۵ دقیقه با همین تنظیمات</button>
+    </div>
+    <div id="cmp" style="margin-top:10px"></div>
+  </div>
+
+  <!-- ───────── نتایج ───────── -->
+  <div id="results" style="display:none">
+    <div class="card"><h2>نتیجه</h2><div class="stats" id="stats"></div><div id="setupInfo" class="note"></div></div>
+
+    <div class="card">
+      <h2>نمودار قیمت و موقعیت‌ها</h2>
+      <div class="row" style="margin-bottom:6px">
+        <button class="sec" id="zIn">+</button><button class="sec" id="zOut">−</button>
+        <button class="sec" id="pL">◀</button><button class="sec" id="pR">▶</button>
+        <button class="sec" id="tPrev">معامله قبلی</button><button class="sec" id="tNext">معامله بعدی</button>
+        <button class="sec" id="gEnd">رفتن به آخر</button>
+        <label class="chk"><input type="checkbox" id="oSetups" checked>کندل‌های اسپایک</label>
+        <label class="chk"><input type="checkbox" id="oBos">علامت BOS و CHoCH</label>
+        <label class="chk"><input type="checkbox" id="oSw">سوئینگ‌ها</label>
+      </div>
+      <div id="info">&nbsp;</div>
+      <canvas class="cv" id="cvPrice" style="height:470px"></canvas>
+      <div class="hint" style="font-size:11px;color:var(--mut);margin-top:4px">چرخ ماوس = بزرگ‌نمایی، کشیدن = جابه‌جایی. در موبایل با دو انگشت بزرگ‌نمایی کن. روی هر ردیف جدول بزن تا همان معامله روی نمودار بیاید. سبز = ناحیه سود، قرمز = ناحیه ضرر، خط آبی نقطه‌چین = ورود دوم.</div>
+    </div>
+
+    <div class="card"><h2>منحنی موجودی</h2><canvas class="cv" id="cvEq" style="height:210px"></canvas></div>
+
+    <div class="card">
+      <h2>همه معاملات</h2>
+      <div class="row" style="margin-bottom:6px">
+        <select id="flt" style="max-width:200px"><option value="all">همه</option><option value="win">فقط برد</option><option value="loss">فقط باخت</option><option value="buy">فقط خرید</option><option value="sell">فقط فروش</option></select>
+        <button class="sec" id="btnCsv">خروجی CSV معاملات</button>
+        <span id="cnt" style="color:var(--mut);font-size:12px"></span>
+      </div>
+      <div class="scroll"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+      <div class="row" style="margin-top:6px"><button class="sec" id="btnMore" style="display:none">نمایش ردیف‌های بیشتر</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   بک‌تست اسپایک BOS  -  Written by Ali Edrisi
+   ============================================================ */
+const $ = id => document.getElementById(id);
+
+/* ───────── تنظیمات اندیکاتور (همه ورودی‌های اسکریپت پاین) ───────── */
+const PARAMS = [
+ {g:"ساختار بازار", items:[
+  {k:"swingLen",t:"int",def:3,min:1,label:"طول سوئینگ (تعداد کندل چپ و راست)",hint:"کمتر = حساس‌تر و پرنویزتر. برای ۱ و ۵ دقیقه عدد ۳ مناسب است."},
+  {k:"onlyFirstBos",t:"bool",def:false,label:"فقط اولین BOS بعد از CHoCH",hint:"روشن = سخت‌گیرانه‌تر."},
+  {k:"maxBarsToLevel",t:"int",def:50,min:5,max:400,label:"حداکثر کندل بین سوئینگ شکسته‌شده تا کندل اسپایک",hint:"شکستن سوئینگ خیلی قدیمی، شکست رنج است و رد می‌شود."},
+  {k:"minPullATR",t:"float",def:0.8,min:0,step:0.1,label:"حداقل عمق پولبک پیش از شکست (ضریب ATR)",hint:"فاصله سوئینگ شکسته‌شده تا آخرین کف (یا سقف) حرکت. صفر = خاموش."}]},
+ {g:"کندل اسپایک", items:[
+  {k:"bodyMult",t:"float",def:1.5,min:0.5,step:0.1,label:"بدنه اسپایک حداقل چند برابر میانگین بدنه",hint:""},
+  {k:"bodyAvgLen",t:"int",def:20,min:3,label:"طول میانگین بدنه",hint:""},
+  {k:"minBodyRatio",t:"float",def:0.65,min:0.3,max:1,step:0.05,label:"حداقل نسبت بدنه به کل کندل",hint:"بالاتر = سایه کوتاه‌تر."}]},
+ {g:"ورود", items:[
+  {k:"waitCandles",t:"int",def:3,min:1,label:"حداکثر کندل انتظار برای پولبک",hint:"بعد از کندل مرجع (اولین کندل پس از اسپایک) شمرده می‌شود."}]},
+ {g:"ریسک و حد ضرر و حد سود", items:[
+  {k:"bufferTicks",t:"int",def:10,min:0,label:"فاصله اضافی حد ضرر (تیک)",hint:"روی فارکس پنج رقمی ۱۰ تیک = یک پیپ. روی EURUSDT بایننس (چهار رقم اعشار) ۱۰ تیک = ده پیپ است."},
+  {k:"minRiskATR",t:"float",def:0.3,min:0,step:0.1,label:"حداقل فاصله حد ضرر (ضریب ATR)",hint:"صفر = خاموش."},
+  {k:"spreadTicks",t:"int",def:0,min:0,label:"اسپرد یا کمیسیون هر معامله (تیک)",hint:"از نتیجه هر ورود کم می‌شود."},
+  {k:"rr",t:"float",def:1.0,min:0.2,step:0.1,label:"نسبت سود به ریسک ورود اول",hint:""}]},
+ {g:"ورود دوم", items:[
+  {k:"useE2",t:"bool",def:true,label:"استفاده از ورود دوم",hint:""},
+  {k:"e2Frac",t:"float",def:50,min:10,max:90,step:1,label:"ورود دوم در چند درصد فاصله حد ضرر",hint:""},
+  {k:"cancelFrac",t:"float",def:90,min:50,max:100,step:1,label:"لغو ورود دوم وقتی قیمت به چند درصد هدف رسید",hint:""}]},
+ {g:"فیلتر ساعت معامله", items:[
+  {k:"useSess",t:"bool",def:false,label:"فقط داخل این بازه ساعتی معامله کن",hint:"بیرون بازه ستاپ و ورود جدید باز نمی‌شود؛ معامله باز تا پایان مدیریت می‌شود."},
+  {k:"sessStr",t:"text",def:"0900-1700",label:"ساعت‌های معامله",hint:"مثال: 0900-1700 یا 2200-0500. روزها: 0900-1700:23456 (۱ یکشنبه تا ۷ شنبه). چند بازه را با ویرگول جدا کن."},
+  {k:"sessTz",t:"text",def:"Asia/Tehran",label:"منطقه زمانی بازه",hint:"مثل Asia/Tehran یا UTC یا Europe/London یا America/New_York."}]}
+];
+const DEF = {};
+PARAMS.forEach(g=>g.items.forEach(p=>DEF[p.k]=p.def));
+
+function buildParams(){
+  const box=$("params"); box.innerHTML="";
+  PARAMS.forEach(g=>{
+    const h=document.createElement("div"); h.className="grp"; h.textContent=g.g; box.appendChild(h);
+    g.items.forEach(p=>{
+      const d=document.createElement("div"); d.className="fld"+(p.t==="bool"?" chk":"");
+      let inner="";
+      if(p.t==="bool") inner=`<label class="chk"><input type="checkbox" id="p_${p.k}" data-save ${p.def?"checked":""}>${p.label}</label>`;
+      else if(p.t==="text") inner=`<label>${p.label}</label><input type="text" id="p_${p.k}" data-save value="${p.def}" dir="ltr">`;
+      else inner=`<label>${p.label}</label><input type="number" id="p_${p.k}" data-save value="${p.def}" ${p.min!==undefined?`min="${p.min}"`:""} ${p.max!==undefined?`max="${p.max}"`:""} step="${p.t==="int"?1:(p.step||"any")}">`;
+      if(p.hint) inner+=`<div class="hint">${p.hint}</div>`;
+      if(p.t==="bool"){ d.style.flexDirection="column"; d.style.alignItems="flex-start"; }
+      d.innerHTML=inner; box.appendChild(d);
+    });
+  });
+}
+function readParams(){
+  const P={};
+  PARAMS.forEach(g=>g.items.forEach(p=>{
+    const el=$("p_"+p.k);
+    if(p.t==="bool") P[p.k]=el.checked;
+    else if(p.t==="text") P[p.k]=el.value.trim()||p.def;
+    else { let v=Number(el.value); if(!isFinite(v)||el.value==="") v=p.def;
+      if(p.min!==undefined&&v<p.min) v=p.min; if(p.max!==undefined&&v>p.max) v=p.max;
+      if(p.t==="int") v=Math.round(v); P[p.k]=v; }
+  }));
+  P.riskMode=$("riskMode").value; P.riskAmt=Math.max(0,Number($("riskAmt").value)||0);
+  P.riskPct=Math.max(0,Number($("riskPct").value)||0); P.balance=Math.max(1,Number($("balance").value)||1000);
+  P.compound=$("compound").checked; P.contract=Math.max(1,Number($("contract").value)||100000);
+  return P;
+}
+
+/* ───────── ذخیره تنظیمات ───────── */
+function saveSettings(){
+  try{ const o={}; document.querySelectorAll("[data-save]").forEach(e=>{o[e.id]=e.type==="checkbox"?e.checked:e.value;}); localStorage.setItem("spikeBosBT",JSON.stringify(o)); }catch(e){}
+}
+function loadSettings(){
+  try{ const o=JSON.parse(localStorage.getItem("spikeBosBT")||"{}");
+    document.querySelectorAll("[data-save]").forEach(e=>{ if(!(e.id in o)) return; if(e.type==="checkbox") e.checked=!!o[e.id]; else e.value=o[e.id]; }); }catch(e){}
+}
+
+/* ───────── ابزارهای زمان ───────── */
+const fmtCache={};
+function dtf(tz){
+  if(!fmtCache[tz]) fmtCache[tz]=new Intl.DateTimeFormat("en-CA",{timeZone:tz,hourCycle:"h23",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",weekday:"short"});
+  return fmtCache[tz];
+}
+function validTz(tz){ try{ dtf(tz); return true; }catch(e){ return false; } }
+function partsOf(ms,tz){
+  const o={}; for(const p of dtf(tz).formatToParts(new Date(ms))) o[p.type]=p.value; return o;
+}
+function fmtTime(ms,short){
+  if(!isFinite(ms)) return "-";
+  let tz=$("dispTz").value.trim()||"UTC"; if(!validTz(tz)) tz="UTC";
+  const p=partsOf(ms,tz);
+  return short? `${p.month}-${p.day} ${p.hour}:${p.minute}` : `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
+function tzOffset(ms,tz){ const p=partsOf(ms,tz); return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)-Math.floor(ms/1000)*1000; }
+function wallToEpoch(y,mo,d,h,mi,s,tz){
+  const guess=Date.UTC(y,mo-1,d,h,mi,s); if(tz==="UTC") return guess;
+  const off=tzOffset(guess,tz); let res=guess-off; const off2=tzOffset(res,tz); if(off2!==off) res=guess-off2; return res;
+}
+const WD={Sun:1,Mon:2,Tue:3,Wed:4,Thu:5,Fri:6,Sat:7};
+
+/* ============================================================
+   موتور بک‌تست  (پورت اندیکاتور پاین)
+   ============================================================ */
+// ==ENGINE_START==
+function parseSessions(str){
+  const out=[]; for(const part of String(str).split(",")){
+    const m=part.trim().match(/^(\d{2})(\d{2})-(\d{2})(\d{2})(?::(\d+))?$/); if(!m) continue;
+    const days=m[5]?new Set(m[5].split("").map(Number)):null;
+    out.push({a:+m[1]*60+ +m[2], b:+m[3]*60+ +m[4], days});
+  } return out;
+}
+function sessionFlags(t,P,partsFn){
+  const n=t.length, f=new Uint8Array(n);
+  if(!P.useSess){ f.fill(1); return f; }
+  const ss=parseSessions(P.sessStr); if(!ss.length){ f.fill(1); return f; }
+  for(let i=0;i<n;i++){
+    const pr=partsFn(t[i],P.sessTz); const mins=pr.h*60+pr.m, wd=pr.wd; let ok=false;
+    for(const s of ss){
+      if(s.a===s.b){ if(!s.days||s.days.has(wd)) ok=true; }
+      else if(s.a<s.b){ if(mins>=s.a&&mins<s.b&&(!s.days||s.days.has(wd))) ok=true; }
+      else { // بازه شبانه: روز هفته مربوط به روز شروع بازه است
+        if(mins>=s.a&&(!s.days||s.days.has(wd))) ok=true;
+        else if(mins<s.b&&(!s.days||s.days.has(wd===1?7:wd-1))) ok=true;
+      }
+    }
+    f[i]=ok?1:0;
+  }
+  return f;
+}
+
+function runEngine(D,P,partsFn){
+  const n=D.t.length,o=D.o,h=D.h,l=D.l,c=D.c;
+  const L=P.swingLen, mint=P.mintick;
+  const bufferPx=P.bufferTicks*mint, costPx=P.spreadTicks*mint;
+  const e2Frac=P.e2Frac/100, cancelFrac=P.cancelFrac/100;
+
+  // ATR(14) با میانگین RMA مثل پاین
+  const atr=new Float64Array(n).fill(NaN); let rma=NaN,sumTR=0;
+  for(let i=0;i<n;i++){
+    const tr=i===0?h[i]-l[i]:Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1]));
+    if(i<14){ sumTR+=tr; if(i===13){ rma=sumTR/14; atr[i]=rma; } }
+    else { rma=(rma*13+tr)/14; atr[i]=rma; }
+  }
+  // میانگین بدنه کندل‌های قبلی (sma[1])
+  const bAvg=new Float64Array(n).fill(NaN);
+  { const len=P.bodyAvgLen; let s=0;
+    for(let i=0;i<n;i++){ s+=Math.abs(c[i]-o[i]); if(i>=len) s-=Math.abs(c[i-len]-o[i-len]); if(i>=len-1&&i+1<n) bAvg[i+1]=s/len; } }
+  const inSess=sessionFlags(D.t,P,partsFn);
+
+  let trend=0,bosCount=0,shP=NaN,shI=-1,shAct=false,slP=NaN,slI=-1,slAct=false;
+  let stage=0,d=0,base=NaN,refLvl=NaN,waitLeft=0,fillPx=NaN,slPx=NaN,tpPx=NaN,riskPx=NaN,e2Lvl=NaN,cancelLvl=NaN,e2Px=NaN,e2State=0;
+  let curSetup=null,cur=null,bal=P.balance;
+  const trades=[],setups=[],events=[],swings=[];
+  let nSetups=0;
+
+  for(let i=0;i<n;i++){
+    // ── سوئینگ‌های تأییدشده (بدون نگاه به آینده)
+    if(i>=2*L){
+      const ci=i-L; let isH=true,isL=true;
+      for(let k=1;k<=L;k++){
+        if(!(h[ci]>h[ci-k])) isH=false;
+        if(h[ci+k]>h[ci]) isH=false;
+        if(!(l[ci]<l[ci-k])) isL=false;
+        if(l[ci+k]<l[ci]) isL=false;
+        if(!isH&&!isL) break;
+      }
+      if(isH){ shP=h[ci]; shI=ci; shAct=true; swings.push({bar:ci,type:"H",price:h[ci]}); }
+      if(isL){ slP=l[ci]; slI=ci; slAct=true; swings.push({bar:ci,type:"L",price:l[ci]}); }
+    }
+
+    // ── مدیریت ستاپ و موقعیت
+    let justFilled=false; const sessOK=inSess[i]===1;
+    if(stage===1){
+      refLvl=d===1?l[i]:h[i];
+      const slChk=base-d*bufferPx;
+      if(d*(refLvl-slChk)<=0){ stage=0; curSetup.status="ref_invalid"; }
+      else { stage=2; waitLeft=P.waitCandles; curSetup.refBar=i; curSetup.refLvl=refLvl; }
+    } else if(stage===2&&!sessOK){
+      stage=0; curSetup.status="session";
+    } else if(stage===2){
+      const advP=d===1?l[i]:h[i];
+      if(d*(advP-refLvl)<=0){
+        const fp=d*(o[i]-refLvl)<=0?o[i]:refLvl;
+        const sp=base-d*bufferPx, rk=d*(fp-sp);
+        if(rk<=0||rk<P.minRiskATR*atr[i]){ stage=0; curSetup.status="risk"; }
+        else {
+          fillPx=fp; slPx=sp; riskPx=rk; tpPx=fp+d*P.rr*rk;
+          e2Lvl=fp-d*e2Frac*rk; cancelLvl=fp+(tpPx-fp)*cancelFrac;
+          e2State=P.useE2?1:0; e2Px=NaN; stage=3; justFilled=true;
+          curSetup.status="filled";
+          const riskMoney=P.riskMode==="fixed"?P.riskAmt:(P.compound?bal:P.balance)*P.riskPct/100;
+          cur={id:trades.length+1,dir:d,setupBar:curSetup.bar,refBar:curSetup.refBar,fillBar:i,fillPx:fp,slPx:sp,tpPx:tpPx,riskPx:rk,
+               e2Lvl:P.useE2?e2Lvl:NaN,e2Bar:-1,e2Px:NaN,exitBar:-1,exitPx:NaN,open:true,res:"open",r1:NaN,r2:NaN,rTot:NaN,
+               riskMoney:riskMoney,units:riskMoney/rk,pnl:NaN,balAfter:NaN,lvl:curSetup.lvl,lvlI:curSetup.lvlI,base:base};
+          trades.push(cur);
+        }
+      } else {
+        waitLeft-=1;
+        if(waitLeft<=0){ stage=0; curSetup.status="expired"; }
+      }
+    }
+
+    if(stage===3){
+      const advP3=d===1?l[i]:h[i], favP3=d===1?h[i]:l[i];
+      const slHit=d*(advP3-slPx)<=0;
+      const tpHit=!justFilled&&d*(favP3-tpPx)>=0;
+      const cancelHit=!justFilled&&d*(favP3-cancelLvl)>=0;
+      const e2Touch=d*(advP3-e2Lvl)<=0;
+      if(e2State===1){
+        if(e2Touch&&(slHit||!cancelHit)){
+          e2Px=(!justFilled&&d*(o[i]-e2Lvl)<=0)?o[i]:e2Lvl;
+          e2State=2; cur.e2Bar=i; cur.e2Px=e2Px;
+        } else if(cancelHit){ e2State=3; }
+      }
+      let closed=false,exitPx=NaN;
+      if(slHit){ exitPx=(!justFilled&&d*(o[i]-slPx)<=0)?o[i]:slPx; closed=true; }
+      else if(tpHit){ exitPx=tpPx; closed=true; }
+      if(closed){
+        const r1=(d*(exitPx-fillPx)-costPx)/riskPx;
+        let r2=NaN; if(e2State===2) r2=(d*(exitPx-e2Px)-costPx)/riskPx;
+        const rTot=r1+(isNaN(r2)?0:r2);
+        cur.open=false; cur.exitBar=i; cur.exitPx=exitPx; cur.res=r1>0?"TP":"SL";
+        cur.r1=r1; cur.r2=r2; cur.rTot=rTot; cur.pnl=rTot*cur.riskMoney;
+        bal+=cur.pnl; cur.balAfter=bal;
+        stage=0; e2State=0; cur=null;
+      }
+    }
+
+    // ── شکست ساختار و ستاپ جدید
+    const brkUp=shAct&&c[i]>shP;
+    const brkDn=slAct&&c[i]<slP&&!brkUp;
+    if(brkUp||brkDn){
+      const dd=brkUp?1:-1, lvl=brkUp?shP:slP, lvlI=brkUp?shI:slI;
+      const isChoch=trend!==dd; trend=dd;
+      if(isChoch) bosCount=0; else bosCount+=1;
+      if(brkUp) shAct=false; else slAct=false;
+      const body=Math.abs(c[i]-o[i]), rng=h[i]-l[i];
+      const isSpike=rng>0&&body>=P.bodyMult*bAvg[i]&&body/rng>=P.minBodyRatio;
+      const spk=isSpike&&(brkUp?c[i]>o[i]:c[i]<o[i]);
+      const pre=spk&&sessOK&&!isChoch&&(!P.onlyFirstBos||bosCount===1)&&stage===0&&(i-lvlI)<=P.maxBarsToLevel;
+      let legExt=NaN;
+      if(pre){
+        legExt=brkUp?l[i]:h[i];
+        for(let j=lvlI;j<=i;j++) legExt=brkUp?Math.min(legExt,l[j]):Math.max(legExt,h[j]);
+      }
+      const qualifies=pre&&Math.abs(lvl-legExt)>=P.minPullATR*atr[i];
+      let why="";
+      if(!qualifies){
+        if(!spk) why="اسپایک نیست";
+        else if(!sessOK) why="بیرون از ساعت معامله";
+        else if(P.onlyFirstBos&&bosCount!==1) why="اولین BOS نیست";
+        else if(stage!==0) why="ستاپ دیگری فعال است";
+        else if((i-lvlI)>P.maxBarsToLevel) why="سوئینگ خیلی قدیمی";
+        else why="پولبک کم‌عمق";
+      }
+      events.push({bar:i,lvlI:lvlI,lvl:lvl,dir:dd,choch:isChoch,bos:bosCount,ok:qualifies,why:why});
+      if(qualifies){
+        d=dd; base=legExt; stage=1; nSetups++;
+        curSetup={id:nSetups,dir:dd,bar:i,lvl:lvl,lvlI:lvlI,base:legExt,status:"pending",refBar:-1,refLvl:NaN};
+        setups.push(curSetup);
+      }
+    }
+  }
+  const stats=computeStats(trades,setups,P);
+  return {trades:trades,setups:setups,events:events,swings:swings,stats:stats,atr:atr,n:n};
+}
+
+function computeStats(trades,setups,P){
+  const S={nSetups:setups.length,filled:0,e1Win:0,e1Loss:0,nE2:0,e2Win:0,e2Loss:0,sumR:0,gW:0,gL:0,maxDDR:0,
+           closed:0,wins:0,losses:0,pnl:0,bal0:P.balance,balEnd:P.balance,maxDDm:0,maxDDpct:0,maxLossStreak:0,cntOpen:0,
+           st:{filled:0,expired:0,session:0,risk:0,ref_invalid:0,pending:0}};
+  setups.forEach(s=>{ if(s.status==="filled") S.st.filled++; else if(S.st[s.status]!==undefined) S.st[s.status]++; else S.st.pending++; });
+  let eqR=0,peakR=0,bal=P.balance,peakB=P.balance,streak=0;
+  const eq=[{i:0,b:P.balance,r:0}];
+  for(const t of trades){
+    S.filled++;
+    if(t.open){ S.cntOpen++; continue; }
+    S.closed++;
+    if(t.r1>0){S.e1Win++;S.gW+=t.r1;} else {S.e1Loss++;S.gL+=Math.abs(t.r1);}
+    if(!isNaN(t.r2)){ S.nE2++; if(t.r2>0){S.e2Win++;S.gW+=t.r2;} else {S.e2Loss++;S.gL+=Math.abs(t.r2);} }
+    S.sumR+=t.rTot; eqR+=t.rTot; peakR=Math.max(peakR,eqR); S.maxDDR=Math.max(S.maxDDR,peakR-eqR);
+    if(t.rTot>0){S.wins++;streak=0;} else {S.losses++;streak++;S.maxLossStreak=Math.max(S.maxLossStreak,streak);}
+    bal+=t.pnl; S.pnl+=t.pnl; peakB=Math.max(peakB,bal);
+    const dd=peakB-bal; if(dd>S.maxDDm) S.maxDDm=dd; const pc=peakB>0?dd/peakB*100:0; if(pc>S.maxDDpct) S.maxDDpct=pc;
+    eq.push({i:eq.length,b:bal,r:eqR});
+  }
+  S.balEnd=bal; S.eq=eq;
+  S.wrE1=S.closed?S.e1Win/S.closed*100:NaN; S.wrAll=S.closed?S.wins/S.closed*100:NaN;
+  S.pf=S.gL>0?S.gW/S.gL:NaN; S.avgR=S.closed?S.sumR/S.closed:NaN;
+  return S;
+}
+// ==ENGINE_END==
+
+/* ───────── داده: Binance ───────── */
+const HOSTS=["https://data-api.binance.vision","https://api.binance.com","https://api1.binance.com","https://api2.binance.com","https://api3.binance.com","https://api4.binance.com"];
+let goodHost=null, cancelFlag=false;
+async function getJSON(url,ms){
+  const ac=new AbortController(); const tm=setTimeout(()=>ac.abort(),ms||20000);
+  try{ const r=await fetch(url,{signal:ac.signal}); if(!r.ok) throw new Error("HTTP "+r.status); return await r.json(); }
+  finally{ clearTimeout(tm); }
+}
+async function klines(sym,interval,st,en){
+  const q=`/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=${interval}&startTime=${st}&endTime=${en}&limit=1000`;
+  const order=goodHost?[goodHost,...HOSTS.filter(h=>h!==goodHost)]:HOSTS; let lastErr=null;
+  for(const hst of order){
+    for(let a=0;a<2;a++){
+      try{ const r=await getJSON(hst+q); goodHost=hst; return r; }catch(e){ lastErr=e; if(String(e.message).startsWith("HTTP 4")) {if(!/HTTP 4(18|29|03|51)/.test(e.message)) throw e;} }
+    }
+  }
+  throw lastErr||new Error("network");
+}
+async function downloadBinance(sym,tfMin,fromMs,toMs,onProg){
+  const tfMs=tfMin*60000, win=tfMs*1000, wins=[];
+  for(let s=fromMs;s<toMs;s+=win) wins.push([s,Math.min(toMs,s+win-1)]);
+  const res=new Array(wins.length); let next=0,done=0;
+  const interval=tfMin===1?"1m":tfMin===5?"5m":"15m";
+  async function worker(){
+    while(true){
+      if(cancelFlag) return; const k=next++; if(k>=wins.length) return;
+      res[k]=await klines(sym,interval,wins[k][0],wins[k][1]); done++; onProg(done/wins.length);
+    }
+  }
+  await Promise.all([worker(),worker(),worker(),worker()]);
+  if(cancelFlag) throw new Error("لغو شد");
+  const rows=[]; for(const r of res) for(const k of r) rows.push([k[0],+k[1],+k[2],+k[3],+k[4],+k[5]]);
+  return rows;
+}
+
+/* ───────── داده: CSV ───────── */
+function parseCSV(text,tz){
+  const lines=text.split(/\r?\n/), rows=[]; let dayFirst=null;
+  // تشخیص ترتیب روز و ماه
+  const datePat=/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})/;
+  for(let i=0;i<Math.min(lines.length,3000);i++){
+    const m=lines[i].trim().split(/[,;\t]/)[0].match(datePat); if(!m) continue;
+    if(+m[1]>12){dayFirst=true;break;} if(+m[2]>12){dayFirst=false;break;}
+  }
+  if(dayFirst===null) dayFirst=false;
+  for(const ln of lines){
+    const s=ln.trim(); if(!s) continue;
+    const f=s.split(/[,;\t]/).map(x=>x.trim().replace(/^"|"$/g,"")); if(f.length<5) continue;
+    let ms=NaN, ohlc=null;
+    if(/^\d{9,14}(\.\d+)?$/.test(f[0])){ let v=Number(f[0]); ms=v<1e11?v*1000:v; ohlc=f.slice(1,6); }
+    else {
+      let dp,tp,rest;
+      if(/[ T]\d{1,2}:\d{2}/.test(f[0])){ const sp=f[0].split(/[ T]/); dp=sp[0]; tp=sp[1]; rest=f.slice(1,6); }
+      else { dp=f[0]; tp=f[1]; rest=f.slice(2,7); }
+      let y,mo,d;
+      let m=dp.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+      if(m){y=+m[1];mo=+m[2];d=+m[3];}
+      else { m=dp.match(datePat); if(!m) continue; y=+m[3]; if(dayFirst){d=+m[1];mo=+m[2];} else {mo=+m[1];d=+m[2];} }
+      const tm=(tp||"").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/); if(!tm) continue;
+      ms=wallToEpoch(y,mo,d,+tm[1],+tm[2],+(tm[3]||0),tz); ohlc=rest;
+    }
+    const v=ohlc.map(Number); if(v.slice(0,4).some(x=>!isFinite(x))||!isFinite(ms)) continue;
+    rows.push([ms,v[0],v[1],v[2],v[3],isFinite(v[4])?v[4]:0]);
+  }
+  return rows;
+}
+
+/* ───────── مجموعه داده ───────── */
+const DS={}; // کلید: تایم‌فریم به دقیقه
+function makeDS(rows,tfMin,derived){
+  rows.sort((a,b)=>a[0]-b[0]);
+  const u=[]; for(const r of rows){ if(u.length&&u[u.length-1][0]===r[0]) u[u.length-1]=r; else u.push(r); }
+  const n=u.length, D={t:new Float64Array(n),o:new Float64Array(n),h:new Float64Array(n),l:new Float64Array(n),c:new Float64Array(n),v:new Float64Array(n),tf:tfMin,derived:!!derived};
+  for(let i=0;i<n;i++){ const r=u[i]; D.t[i]=r[0];D.o[i]=r[1];D.h[i]=r[2];D.l[i]=r[3];D.c[i]=r[4];D.v[i]=r[5]; }
+  let dec=0; for(let i=0;i<Math.min(n,4000);i++){ const s=String(D.c[i]); const k=s.indexOf("."); if(k>=0) dec=Math.max(dec,s.length-k-1); }
+  D.dec=Math.min(8,Math.max(1,dec)); D.mint=Math.pow(10,-D.dec); return D;
+}
+function resample(src,tf){
+  const ms=tf*60000, rows=[]; let cur=null;
+  for(let i=0;i<src.t.length;i++){
+    const b=Math.floor(src.t[i]/ms)*ms;
+    if(!cur||cur[0]!==b){ if(cur) rows.push(cur); cur=[b,src.o[i],src.h[i],src.l[i],src.c[i],src.v[i]]; }
+    else { cur[2]=Math.max(cur[2],src.h[i]); cur[3]=Math.min(cur[3],src.l[i]); cur[4]=src.c[i]; cur[5]+=src.v[i]; }
+  }
+  if(cur) rows.push(cur); return makeDS(rows,tf,true);
+}
+function getDS(tf){
+  if(DS[tf]) return DS[tf];
+  const bases=Object.keys(DS).map(Number).filter(b=>!DS[b].derived&&b<tf&&tf%b===0).sort((a,b)=>b-a);
+  if(!bases.length) return null;
+  DS[tf]=resample(DS[bases[0]],tf); return DS[tf];
+}
+function setStatus(msg,err){ const s=$("status"); s.textContent=msg||""; s.className=err?"err":""; }
+function showDSInfo(){
+  const ks=Object.keys(DS).map(Number).sort((a,b)=>a-b); if(!ks.length){ $("dsinfo").innerHTML=""; return; }
+  let h=`<table><thead><tr><th>تایم‌فریم</th><th>تعداد کندل</th><th>اولین کندل</th><th>آخرین کندل</th><th>منبع</th><th></th></tr></thead><tbody>`;
+  ks.forEach(k=>{ const D=DS[k]; h+=`<tr><td>${k} دقیقه</td><td>${D.t.length.toLocaleString("en")}</td><td class="l">${fmtTime(D.t[0])}</td><td class="l">${fmtTime(D.t[D.t.length-1])}</td><td>${D.derived?"ساخته‌شده از تایم‌فریم کوچک‌تر":"داده اصلی"}</td><td><button class="sec" data-save-tf="${k}">ذخیره CSV</button></td></tr>`; });
+  $("dsinfo").innerHTML=h+"</tbody></table>";
+  $("dsinfo").querySelectorAll("[data-save-tf]").forEach(b=>b.onclick=()=>{
+    const D=DS[b.dataset.saveTf]; let s="time_ms,open,high,low,close,volume\n";
+    for(let i=0;i<D.t.length;i++) s+=`${D.t[i]},${D.o[i]},${D.h[i]},${D.l[i]},${D.c[i]},${D.v[i]}\n`;
+    download(`${$("symbol").value||"data"}_${D.tf}m.csv`,s);
+  });
+  updateTickHint();
+}
+function download(name,text){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["﻿"+text],{type:"text/csv"})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+}
+function effMintick(D){ const v=Number($("mintick").value); return v>0?v:(D?D.mint:0.0001); }
+function updateTickHint(){
+  const ks=Object.keys(DS).map(Number).sort((a,b)=>a-b); const D=ks.length?DS[ks[0]]:null;
+  if(!D){ $("tickHint").textContent=""; return; }
+  const mt=effMintick(D), bt=Number($("p_bufferTicks").value)||0;
+  $("tickHint").textContent=`تیک مورد استفاده: ${mt}. فاصله اضافی حد ضرر فعلی برابر ${(bt*mt).toFixed(D.dec+1)} واحد قیمت است.`;
+}
+
+/* ───────── دانلود و بارگذاری ───────── */
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+$("btnDl").onclick=async()=>{
+  const sym=$("symbol").value.trim().toUpperCase(); if(!sym){ setStatus("نماد را وارد کن.",true); return; }
+  const f=$("dFrom").value, t=$("dTo").value; if(!f||!t){ setStatus("تاریخ شروع و پایان را وارد کن.",true); return; }
+  const fromMs=Date.parse(f+"T00:00:00Z"), toMs=Math.min(Date.now(),Date.parse(t+"T23:59:59Z"));
+  if(!(toMs>fromMs)){ setStatus("بازه تاریخ درست نیست.",true); return; }
+  const tfs=[1,5,15].filter(k=>$("dl"+k).checked); if(!tfs.length){ setStatus("حداقل یک تایم‌فریم را انتخاب کن.",true); return; }
+  cancelFlag=false; $("btnDl").disabled=true; $("btnCancel").style.display=""; $("pbar").style.display="";
+  try{
+    for(const tf of tfs){
+      const need=Math.ceil((toMs-fromMs)/(tf*60000));
+      setStatus(`در حال دانلود ${sym} تایم‌فریم ${tf} دقیقه (حدود ${need.toLocaleString("en")} کندل)...`);
+      const rows=await downloadBinance(sym,tf,fromMs,toMs,p=>{ $("pfill").style.width=(p*100).toFixed(0)+"%"; });
+      if(rows.length<50) throw new Error("داده‌ای برای این نماد و بازه پیدا نشد.");
+      // داده‌های ساخته‌شده قبلی را پاک کن تا با داده جدید هماهنگ شوند
+      Object.keys(DS).forEach(k=>{ if(DS[k].derived) delete DS[k]; });
+      DS[tf]=makeDS(rows,tf,false);
+    }
+    setStatus("دانلود کامل شد. حالا بک‌تست را اجرا کن.");
+  }catch(e){
+    const m=String(e.message||e);
+    setStatus(m==="لغو شد"?"دانلود لغو شد.":"دریافت از بایننس انجام نشد ("+m+").\nاگر در ایران هستی احتمالاً بایننس فیلتر است. با فعال‌کردن وی‌پی‌ان دوباره امتحان کن، یا فایل CSV را بارگذاری کن.",true);
+  }
+  $("btnDl").disabled=false; $("btnCancel").style.display="none"; $("pbar").style.display="none"; showDSInfo();
+};
+$("btnCancel").onclick=()=>{ cancelFlag=true; };
+$("csvFile").onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  let tz=$("csvTz").value.trim()||"UTC"; if(!validTz(tz)){ setStatus("منطقه زمانی CSV معتبر نیست.",true); return; }
+  setStatus("در حال خواندن فایل...");
+  await new Promise(r=>setTimeout(r,30));
+  try{
+    const rows=parseCSV(await f.text(),tz); if(rows.length<50) throw new Error("ردیف معتبر کافی در فایل پیدا نشد.");
+    rows.sort((a,b)=>a[0]-b[0]); const dl=[]; for(let i=1;i<Math.min(rows.length,5000);i++){ const dx=rows[i][0]-rows[i-1][0]; if(dx>0) dl.push(dx); }
+    dl.sort((a,b)=>a-b); const tf=Math.max(1,Math.round(dl[Math.floor(dl.length/2)]/60000));
+    Object.keys(DS).forEach(k=>delete DS[k]); DS[tf]=makeDS(rows,tf,false);
+    setStatus(`فایل خوانده شد: ${rows.length.toLocaleString("en")} کندل با تایم‌فریم ${tf} دقیقه.`);
+    if([1,5,15].includes(tf)) $("tfSel").value=String(tf);
+  }catch(err){ setStatus("خواندن فایل ناموفق بود: "+err.message,true); }
+  showDSInfo(); e.target.value="";
+};
+
+/* ============================================================
+   نمودارها
+   ============================================================ */
+const COL={up:"#26a69a",dn:"#ef5350",grid:"#1d242d",tx:"#8b949e"};
+function niceStep(r){ const e=Math.pow(10,Math.floor(Math.log10(r))); const m=r/e; return (m<1.5?1:m<3?2:m<7?5:10)*e; }
+
+class PriceChart{
+  constructor(cv){ this.cv=cv; this.D=null; this.res=null; this.start=0; this.vis=150; this.sel=-1; this.opt={setups:true,bos:false,sw:false}; this.mx=-1; this.ptrs=new Map(); this.pressed=false; this.attach(); }
+  set(D,res,mint){ this.D=D; this.res=res; this.mint=mint; this.sel=-1; this.vis=Math.min(160,D.t.length); this.start=Math.max(-this.vis*.3,D.t.length-this.vis); this.dec=Math.max(2,D.dec); this.draw(); }
+  size(){ const r=this.cv.getBoundingClientRect(); const dpr=window.devicePixelRatio||1; this.dpr=dpr; this.w=r.width; this.h=r.height; if(this.cv.width!==Math.round(r.width*dpr)||this.cv.height!==Math.round(r.height*dpr)){ this.cv.width=Math.round(r.width*dpr); this.cv.height=Math.round(r.height*dpr); } }
+  clamp(){ const n=this.D.t.length; this.start=Math.min(Math.max(this.start,-this.vis*.3),n-this.vis*.7); }
+  zoomAt(x,f){ const pw=this.w-64, bw=pw/this.vis, idx=this.start+x/bw; this.vis=Math.min(Math.max(this.vis*f,15),Math.max(60,this.D.t.length*1.2)); this.start=idx-x/(pw/this.vis); this.clamp(); this.draw(); }
+  pan(bars){ this.start+=bars; this.clamp(); this.draw(); }
+  focus(tr){
+    const span=Math.max(40,(tr.exitBar>=0?tr.exitBar:this.D.t.length-1)-tr.setupBar); this.vis=Math.min(Math.max(span*2.4,60),Math.max(60,this.D.t.length));
+    this.start=tr.setupBar-this.vis*.25; this.clamp(); this.draw();
+  }
+  attach(){
+    const cv=this.cv;
+    cv.addEventListener("wheel",e=>{ if(!this.D) return; e.preventDefault(); const r=cv.getBoundingClientRect(); this.zoomAt(e.clientX-r.left,e.deltaY<0?0.8:1.25); },{passive:false});
+    cv.addEventListener("pointerdown",e=>{ if(!this.D) return; cv.setPointerCapture(e.pointerId); this.ptrs.set(e.pointerId,e.clientX); this.pressed=true; this.pd=this.pinchD(); });
+    cv.addEventListener("pointermove",e=>{
+      if(!this.D) return; const r=cv.getBoundingClientRect();
+      if(this.ptrs.has(e.pointerId)){
+        const old=this.ptrs.get(e.pointerId); this.ptrs.set(e.pointerId,e.clientX);
+        if(this.ptrs.size>=2){ const nd=this.pinchD(); if(this.pd&&nd){ const xs=[...this.ptrs.values()]; this.zoomAt((xs[0]+xs[1])/2-r.left,this.pd/nd); } this.pd=nd; }
+        else { const bw=(this.w-64)/this.vis; this.pan(-(e.clientX-old)/bw); }
+      }
+      this.mx=e.clientX-r.left; this.hover(); if(!this.pressed) this.draw();
+    });
+    const up=e=>{ this.ptrs.delete(e.pointerId); if(!this.ptrs.size) this.pressed=false; this.pd=null; };
+    cv.addEventListener("pointerup",up); cv.addEventListener("pointercancel",up);
+    cv.addEventListener("pointerleave",()=>{ this.mx=-1; this.draw(); });
+  }
+  pinchD(){ if(this.ptrs.size<2) return null; const xs=[...this.ptrs.values()]; return Math.abs(xs[0]-xs[1])||null; }
+  hover(){
+    const D=this.D; const bw=(this.w-64)/this.vis; const i=Math.floor(this.start+this.mx/bw);
+    if(i<0||i>=D.t.length||this.mx>this.w-64){ $("info").innerHTML="&nbsp;"; return; }
+    const f=v=>v.toFixed(this.dec+1);
+    $("info").textContent=`${fmtTime(D.t[i])}   O ${f(D.o[i])}  H ${f(D.h[i])}  L ${f(D.l[i])}  C ${f(D.c[i])}`;
+  }
+  draw(){
+    if(!this.D) return; this.size(); const ctx=this.cv.getContext("2d"), dpr=this.dpr, W=this.w, H=this.h, D=this.D, res=this.res;
+    ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+    const padR=64,padB=22,padT=8,pw=W-padR,ph=H-padB-padT,n=D.t.length;
+    const i0=Math.max(0,Math.floor(this.start)), i1=Math.min(n-1,Math.ceil(this.start+this.vis));
+    let lo=Infinity,hi=-Infinity; for(let i=i0;i<=i1;i++){ if(D.l[i]<lo) lo=D.l[i]; if(D.h[i]>hi) hi=D.h[i]; }
+    if(!isFinite(lo)) return; let m=(hi-lo)*.08; if(!m) m=this.mint*10; lo-=m; hi+=m;
+    const bw=pw/this.vis, X=i=>(i-this.start+.5)*bw, Y=p=>padT+(hi-p)/(hi-lo)*ph;
+    ctx.font="11px Consolas,monospace"; ctx.textBaseline="middle";
+    // شبکه و محور قیمت
+    const st=niceStep((hi-lo)/6); ctx.strokeStyle=COL.grid; ctx.fillStyle=COL.tx; ctx.lineWidth=1; ctx.textAlign="left";
+    for(let p=Math.ceil(lo/st)*st;p<=hi;p+=st){ const y=Math.round(Y(p))+.5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(pw,y); ctx.stroke(); ctx.fillText(p.toFixed(this.dec+1),pw+4,y); }
+    // محور زمان
+    ctx.textAlign="center"; ctx.textBaseline="top"; const every=Math.max(1,Math.ceil(110/bw));
+    for(let i=Math.ceil(i0/every)*every;i<=i1;i+=every){ const x=Math.round(X(i))+.5; ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+ph); ctx.stroke(); ctx.fillText(fmtTime(D.t[i],true),x,H-padB+5); }
+    ctx.save(); ctx.beginPath(); ctx.rect(0,0,pw,padT+ph); ctx.clip();
+    // کندل‌ها
+    if(bw>=4){
+      const bwid=Math.max(1,Math.floor(bw*.7));
+      for(let i=i0;i<=i1;i++){ const up=D.c[i]>=D.o[i]; ctx.fillStyle=ctx.strokeStyle=up?COL.up:COL.dn; const x=X(i);
+        ctx.beginPath(); ctx.moveTo(Math.round(x)+.5,Y(D.h[i])); ctx.lineTo(Math.round(x)+.5,Y(D.l[i])); ctx.stroke();
+        const yo=Y(D.o[i]),yc=Y(D.c[i]); ctx.fillRect(Math.round(x-bwid/2),Math.min(yo,yc),bwid,Math.max(1,Math.abs(yc-yo))); }
+    } else {
+      ctx.strokeStyle="#9fb3c8"; ctx.beginPath(); for(let i=i0;i<=i1;i++){ const x=X(i),y=Y(D.c[i]); if(i===i0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.stroke();
+    }
+    // ساختار (اختیاری)
+    if(this.opt.bos){ ctx.font="10px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="bottom"; ctx.lineWidth=1;
+      for(const ev of res.events){ if(ev.bar<i0||ev.lvlI>i1) continue; const x0=X(ev.lvlI),x1=X(ev.bar),y=Y(ev.lvl);
+        ctx.strokeStyle=ev.choch?"rgba(240,166,58,.7)":"rgba(139,148,158,.7)"; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x1,y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle=ev.choch?"#f0a63a":"#9aa4ae"; ctx.fillText(ev.choch?"CHoCH":"BOS "+ev.bos,(x0+x1)/2,y-2); } }
+    if(this.opt.sw){ ctx.fillStyle="#d29922"; for(const s of res.swings){ if(s.bar<i0||s.bar>i1) continue; const x=X(s.bar),y=Y(s.price); ctx.beginPath(); if(s.type==="H"){ctx.moveTo(x,y-3);ctx.lineTo(x-3,y-9);ctx.lineTo(x+3,y-9);} else {ctx.moveTo(x,y+3);ctx.lineTo(x-3,y+9);ctx.lineTo(x+3,y+9);} ctx.fill(); } }
+    // ستاپ‌ها
+    if(this.opt.setups){ for(const s of res.setups){ if(s.bar<i0||s.bar>i1) continue; const x=X(s.bar), y=s.dir===1?Y(D.l[s.bar])+8:Y(D.h[s.bar])-8;
+      ctx.fillStyle=s.status==="filled"?"#f0a63a":"#6e7781"; ctx.beginPath(); ctx.arc(x,y,Math.min(4,Math.max(2,bw*.4)),0,7); ctx.fill(); } }
+    // معاملات
+    ctx.font="11px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    res.trades.forEach((tr,idx)=>{
+      const e=tr.exitBar>=0?tr.exitBar:n-1; if(e<i0||tr.fillBar>i1) return;
+      const x0=X(tr.fillBar)-bw/2, x1=X(e)+bw/2, w=Math.max(2,x1-x0);
+      const yF=Y(tr.fillPx),yT=Y(tr.tpPx),yS=Y(tr.slPx);
+      ctx.fillStyle="rgba(38,166,154,.20)"; ctx.fillRect(x0,Math.min(yF,yT),w,Math.abs(yT-yF));
+      ctx.fillStyle="rgba(239,83,80,.20)"; ctx.fillRect(x0,Math.min(yF,yS),w,Math.abs(yS-yF));
+      ctx.strokeStyle="#9aa4ae"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x0,yF); ctx.lineTo(x0+w,yF); ctx.stroke();
+      if(!isNaN(tr.e2Lvl)){ const ye=Y(tr.e2Lvl); ctx.strokeStyle="#58a6ff"; ctx.setLineDash([2,3]); ctx.beginPath(); ctx.moveTo(x0,ye); ctx.lineTo(x0+w,ye); ctx.stroke(); ctx.setLineDash([]);
+        if(tr.e2Bar>=0){ const xe=X(tr.e2Bar),yy=Y(tr.e2Px); ctx.fillStyle="#58a6ff"; ctx.beginPath(); ctx.arc(xe,yy,3.5,0,7); ctx.fill(); } }
+      ctx.fillStyle=tr.dir===1?COL.up:COL.dn; ctx.beginPath(); ctx.arc(X(tr.fillBar),yF,3.5,0,7); ctx.fill();
+      if(!tr.open){ const xx=X(e),yy=Y(tr.exitPx); ctx.fillStyle=tr.rTot>0?COL.up:COL.dn; ctx.beginPath(); ctx.arc(xx,yy,4,0,7); ctx.fill();
+        if(w>46){ ctx.fillStyle="#e6edf3"; ctx.fillText((tr.rTot>0?"+":"")+tr.rTot.toFixed(2)+"R",x0+w/2,tr.dir===1?Math.min(yT,yS)-7:Math.max(yT,yS)+8); } }
+      if(idx===this.sel){ ctx.strokeStyle="#f0a63a"; ctx.lineWidth=2; ctx.strokeRect(x0,Math.min(yT,yS),w,Math.abs(yT-yS)); }
+    });
+    ctx.restore();
+    if(this.mx>=0&&this.mx<pw){ ctx.strokeStyle="rgba(139,148,158,.5)"; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(this.mx,padT); ctx.lineTo(this.mx,padT+ph); ctx.stroke(); ctx.setLineDash([]); }
+  }
+}
+function drawEquity(cv,eq,P){
+  const r=cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1; cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr);
+  const ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); const W=r.width,H=r.height; ctx.clearRect(0,0,W,H);
+  const padL=70,padB=18,padT=10; const pw=W-padL-8, ph=H-padB-padT;
+  if(eq.length<2){ ctx.fillStyle=COL.tx; ctx.font="12px sans-serif"; ctx.textAlign="center"; ctx.fillText("معامله بسته‌شده‌ای وجود ندارد",W/2,H/2); return; }
+  let lo=Math.min(...eq.map(e=>e.b)),hi=Math.max(...eq.map(e=>e.b)); if(hi===lo){hi+=1;lo-=1;} const m=(hi-lo)*.08; lo-=m; hi+=m;
+  const X=i=>padL+i/(eq.length-1)*pw, Y=v=>padT+(hi-v)/(hi-lo)*ph;
+  ctx.font="11px Consolas,monospace"; ctx.fillStyle=COL.tx; ctx.strokeStyle=COL.grid; ctx.textAlign="right"; ctx.textBaseline="middle";
+  const st=niceStep((hi-lo)/4); for(let v=Math.ceil(lo/st)*st;v<=hi;v+=st){ const y=Math.round(Y(v))+.5; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+pw,y); ctx.stroke(); ctx.fillText(v.toFixed(0),padL-5,y); }
+  ctx.setLineDash([4,4]); ctx.strokeStyle="#6e7781"; ctx.beginPath(); ctx.moveTo(padL,Y(P.balance)); ctx.lineTo(padL+pw,Y(P.balance)); ctx.stroke(); ctx.setLineDash([]);
+  const end=eq[eq.length-1].b; ctx.strokeStyle=end>=P.balance?COL.up:COL.dn; ctx.lineWidth=1.6; ctx.beginPath(); eq.forEach((e,i)=>{ if(i===0) ctx.moveTo(X(i),Y(e.b)); else ctx.lineTo(X(i),Y(e.b)); }); ctx.stroke();
+  ctx.fillStyle=COL.tx; ctx.textAlign="center"; ctx.textBaseline="top"; ctx.fillText("شماره معامله",padL+pw/2,H-padB+3);
+}
+
+/* ============================================================
+   اجرا و نمایش نتایج
+   ============================================================ */
+let chart=null, LAST=null, viewList=[], shown=0;
+const fx=(v,d=2)=>(v===undefined||v===null||!isFinite(v))?"-":v.toFixed(d);
+const sgn=v=>v>0?"pos":v<0?"neg":"";
+function partsFnFactory(){ return (ms,tz)=>{ const p=partsOf(ms,tz); return {h:+p.hour,m:+p.minute,wd:WD[p.weekday]||1}; }; }
+function prepareParams(D){
+  const P=readParams(); P.mintick=effMintick(D);
+  if(P.useSess&&!validTz(P.sessTz)) throw new Error("منطقه زمانی بازه ساعتی معتبر نیست.");
+  if(P.useSess&&!parseSessions(P.sessStr).length) throw new Error("قالب ساعت‌های معامله درست نیست. مثال: 0900-1700");
+  return P;
+}
+function doRun(tf){
+  const D=getDS(tf); if(!D) throw new Error(`داده تایم‌فریم ${tf} دقیقه موجود نیست.`);
+  const P=prepareParams(D); const t0=performance.now();
+  const res=runEngine(D,P,partsFnFactory());
+  return {D,P,res,ms:performance.now()-t0,tf};
+}
+function statCard(label,val,cls){ return `<div class="stat"><span>${label}</span><b class="${cls||""}">${val}</b></div>`; }
+function showResults(R){
+  LAST=R; const {D,P,res}=R, S=res.stats, cur=$("cur").value||"";
+  $("results").style.display="";
+  const mon=v=>(v>=0?"+":"-")+Math.abs(v).toFixed(2)+" "+cur;
+  const ret=(S.balEnd/P.balance-1)*100;
+  $("stats").innerHTML=[
+    statCard("تایم‌فریم",R.tf+" دقیقه"),
+    statCard("تعداد کندل",D.t.length.toLocaleString("en")),
+    statCard("ستاپ اسپایک",S.nSetups),
+    statCard("معاملات بسته‌شده",S.closed+(S.cntOpen?` (+${S.cntOpen} باز)`:"")),
+    statCard("نرخ برد ورود اول (مثل اندیکاتور)",fx(S.wrE1,1)+"%"),
+    statCard("نرخ برد کل معاملات (ورود اول و دوم)",fx(S.wrAll,1)+"%"),
+    statCard("ورود دوم فعال شد",S.nE2+` (برد ${S.e2Win} / باخت ${S.e2Loss})`),
+    statCard("سود خالص (R)",(S.sumR>=0?"+":"")+fx(S.sumR),sgn(S.sumR)),
+    statCard("سود خالص (پول)",mon(S.pnl),sgn(S.pnl)),
+    statCard("بازده کل",(ret>=0?"+":"")+fx(ret,1)+"%",sgn(ret)),
+    statCard("موجودی نهایی",fx(S.balEnd)+" "+cur),
+    statCard("ضریب سود (PF)",fx(S.pf)),
+    statCard("میانگین R هر معامله",fx(S.avgR,3),sgn(S.avgR)),
+    statCard("بیشینه افت (R)",fx(S.maxDDR)),
+    statCard("بیشینه افت (پول)",fx(S.maxDDm)+" "+cur+" ("+fx(S.maxDDpct,1)+"%)"),
+    statCard("بیشترین باخت پشت‌سرهم",S.maxLossStreak)
+  ].join("");
+  const st=S.st;
+  $("setupInfo").innerHTML=`سرنوشت ستاپ‌ها: ${st.filled} ورود شد، ${st.expired} منقضی شد (پولبک نیامد)، ${st.risk} رد شد (حد ضرر نامعتبر یا خیلی کوچک)، ${st.ref_invalid} رد شد (کندل مرجع زیر حد ضرر)، ${st.session} لغو شد (خروج از ساعت معامله). زمان اجرا: ${R.ms.toFixed(0)} میلی‌ثانیه.`;
+  if(!chart) chart=new PriceChart($("cvPrice"));
+  chart.opt.setups=$("oSetups").checked; chart.opt.bos=$("oBos").checked; chart.opt.sw=$("oSw").checked;
+  chart.set(D,res,P.mintick);
+  drawEquity($("cvEq"),S.eq,P);
+  buildTable();
+  if(res.trades.length) setTimeout(()=>{ focusIdx(res.trades.length-1,true); },0);
+}
+function buildTable(){
+  const R=LAST; if(!R) return; const f=$("flt").value, cur=$("cur").value||"";
+  viewList=[]; R.res.trades.forEach((t,i)=>{ const ok=f==="all"||(f==="win"&&!t.open&&t.rTot>0)||(f==="loss"&&!t.open&&t.rTot<=0)||(f==="buy"&&t.dir===1)||(f==="sell"&&t.dir===-1); if(ok) viewList.push(i); });
+  $("tbl").querySelector("thead").innerHTML=`<tr><th>#</th><th>جهت</th><th>زمان ورود</th><th>ورود ۱</th><th>حد ضرر</th><th>حد سود</th><th>ورود ۲</th><th>زمان خروج</th><th>قیمت خروج</th><th>نتیجه</th><th>R</th><th>سود و زیان (${cur})</th><th>حجم (واحد)</th><th>لات</th><th>مدت (کندل)</th></tr>`;
+  $("tbl").querySelector("tbody").innerHTML=""; shown=0; $("cnt").textContent=viewList.length+" معامله"; addRows();
+}
+function addRows(){
+  const R=LAST, D=R.D, P=R.P, tb=$("tbl").querySelector("tbody"), d=D.dec+1, end=Math.min(viewList.length,shown+300); let h="";
+  for(let k=shown;k<end;k++){ const i=viewList[k], t=R.res.trades[i];
+    h+=`<tr class="tr" data-i="${i}" id="row${i}"><td>${t.id}</td><td><span class="tag ${t.dir===1?"buy":"sell"}">${t.dir===1?"خرید":"فروش"}</span></td>
+    <td class="l">${fmtTime(D.t[t.fillBar])}</td><td>${t.fillPx.toFixed(d)}</td><td>${t.slPx.toFixed(d)}</td><td>${t.tpPx.toFixed(d)}</td>
+    <td>${isNaN(t.e2Px)?"-":t.e2Px.toFixed(d)}</td><td class="l">${t.open?"-":fmtTime(D.t[t.exitBar])}</td><td>${t.open?"-":t.exitPx.toFixed(d)}</td>
+    <td>${t.open?"باز":(t.res==="TP"?"حد سود":"حد ضرر")}</td><td class="${sgn(t.rTot)}">${t.open?"-":(t.rTot>0?"+":"")+t.rTot.toFixed(2)}</td>
+    <td class="${sgn(t.pnl)}">${t.open?"-":(t.pnl>0?"+":"")+t.pnl.toFixed(2)}</td><td>${Math.round(t.units).toLocaleString("en")}</td><td>${(t.units/P.contract).toFixed(2)}</td>
+    <td>${t.open?"-":t.exitBar-t.fillBar}</td></tr>`; }
+  tb.insertAdjacentHTML("beforeend",h); shown=end; $("btnMore").style.display=shown<viewList.length?"":"none";
+}
+function focusIdx(i,noScroll){
+  const t=LAST.res.trades[i]; if(!t) return; chart.sel=i; chart.focus(t);
+  document.querySelectorAll("tr.sel").forEach(e=>e.classList.remove("sel")); const r=$("row"+i); if(r){ r.classList.add("sel"); }
+}
+$("tbl").addEventListener("click",e=>{ const tr=e.target.closest("tr.tr"); if(!tr) return; focusIdx(+tr.dataset.i); $("cvPrice").scrollIntoView({behavior:"smooth",block:"center"}); });
+$("btnMore").onclick=addRows; $("flt").onchange=buildTable;
+$("btnCsv").onclick=()=>{
+  if(!LAST) return; const D=LAST.D; let s="id,dir,entry_time,entry1,sl,tp,entry2,exit_time,exit,result,R,pnl,units,lots,bars\n";
+  LAST.res.trades.forEach(t=>{ s+=[t.id,t.dir===1?"BUY":"SELL",fmtTime(D.t[t.fillBar]),t.fillPx,t.slPx,t.tpPx,isNaN(t.e2Px)?"":t.e2Px,t.open?"":fmtTime(D.t[t.exitBar]),t.open?"":t.exitPx,t.open?"open":t.res,t.open?"":t.rTot.toFixed(4),t.open?"":t.pnl.toFixed(2),Math.round(t.units),(t.units/LAST.P.contract).toFixed(3),t.open?"":t.exitBar-t.fillBar].join(",")+"\n"; });
+  download(`trades_${LAST.tf}m.csv`,s);
+};
+$("btnRun").onclick=()=>{
+  try{ if(!Object.keys(DS).length) throw new Error("اول داده را دانلود یا بارگذاری کن."); showResults(doRun(+$("tfSel").value)); setStatus(""); }
+  catch(e){ setStatus(e.message,true); window.scrollTo({top:0,behavior:"smooth"}); }
+};
+$("btnCmp").onclick=()=>{
+  try{
+    if(!Object.keys(DS).length) throw new Error("اول داده را دانلود یا بارگذاری کن.");
+    let h=`<table><thead><tr><th>تایم‌فریم</th><th>کندل</th><th>ستاپ</th><th>معامله</th><th>برد کل</th><th>سود (R)</th><th>سود (پول)</th><th>ضریب سود</th><th>افت (R)</th><th></th></tr></thead><tbody>`;
+    for(const tf of [1,5,15]){ let R; try{ R=doRun(tf); }catch(e){ h+=`<tr><td>${tf} دقیقه</td><td colspan="9" style="color:var(--mut)">داده موجود نیست</td></tr>`; continue; }
+      const S=R.res.stats; h+=`<tr><td>${tf} دقیقه</td><td>${R.D.t.length.toLocaleString("en")}</td><td>${S.nSetups}</td><td>${S.closed}</td><td>${fx(S.wrAll,1)}%</td><td class="${sgn(S.sumR)}">${fx(S.sumR)}</td><td class="${sgn(S.pnl)}">${fx(S.pnl)} ${$("cur").value}</td><td>${fx(S.pf)}</td><td>${fx(S.maxDDR)}</td><td><button class="sec" data-tf="${tf}">نمایش</button></td></tr>`; }
+    $("cmp").innerHTML=h+"</tbody></table>";
+    $("cmp").querySelectorAll("[data-tf]").forEach(b=>b.onclick=()=>{ $("tfSel").value=b.dataset.tf; $("btnRun").click(); $("results").scrollIntoView({behavior:"smooth"}); });
+    setStatus("");
+  }catch(e){ setStatus(e.message,true); }
+};
+
+/* ───────── دکمه‌های نمودار ───────── */
+const cvW=()=>($("cvPrice").getBoundingClientRect().width-64)/2;
+$("zIn").onclick=()=>chart&&chart.zoomAt(cvW(),0.7); $("zOut").onclick=()=>chart&&chart.zoomAt(cvW(),1.4);
+$("pL").onclick=()=>chart&&chart.pan(-chart.vis*.3); $("pR").onclick=()=>chart&&chart.pan(chart.vis*.3);
+$("gEnd").onclick=()=>{ if(!chart||!chart.D) return; chart.start=chart.D.t.length-chart.vis*.9; chart.clamp(); chart.draw(); };
+function stepTrade(dx){ if(!LAST||!LAST.res.trades.length) return; const L=LAST.res.trades.length; let i=chart.sel<0?(dx>0?-1:L):chart.sel; i=Math.min(L-1,Math.max(0,i+dx)); focusIdx(i); const r=$("row"+i); if(r) r.scrollIntoView({block:"nearest"}); }
+$("tPrev").onclick=()=>stepTrade(-1); $("tNext").onclick=()=>stepTrade(1);
+["oSetups","oBos","oSw"].forEach(id=>$(id).onchange=()=>{ if(!chart) return; chart.opt.setups=$("oSetups").checked; chart.opt.bos=$("oBos").checked; chart.opt.sw=$("oSw").checked; chart.draw(); });
+window.addEventListener("resize",()=>{ if(chart&&chart.D) chart.draw(); if(LAST) drawEquity($("cvEq"),LAST.res.stats.eq,LAST.P); });
+
+/* ───────── راه‌اندازی ───────── */
+function syncRiskMode(){ const f=$("riskMode").value==="fixed"; $("fRiskAmt").style.display=f?"":"none"; $("fRiskPct").style.display=f?"none":""; }
+$("riskMode").onchange=syncRiskMode;
+$("btnReset").onclick=()=>{ PARAMS.forEach(g=>g.items.forEach(p=>{ const el=$("p_"+p.k); if(p.t==="bool") el.checked=p.def; else el.value=p.def; })); saveSettings(); updateTickHint(); };
+buildParams();
+{ const t=new Date(), f=new Date(t.getTime()-30*86400000); $("dTo").value=t.toISOString().slice(0,10); $("dFrom").value=f.toISOString().slice(0,10); }
+loadSettings(); syncRiskMode();
+document.addEventListener("change",e=>{ if(e.target.matches&&e.target.matches("[data-save]")){ saveSettings(); updateTickHint(); } });
+document.addEventListener("input",e=>{ if(e.target.id==="mintick"||e.target.id==="p_bufferTicks") updateTickHint(); });
+</script>
+</body>
+</html>
