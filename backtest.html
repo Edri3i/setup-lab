@@ -103,13 +103,20 @@ tr.sel{background:#3a2f12!important}
       <div class="fld" id="fRiskPct"><label>درصد ریسک هر معامله</label><input type="number" id="riskPct" value="1" min="0" step="0.1" data-save></div>
       <div class="fld"><label>موجودی اولیه</label><input type="number" id="balance" value="1000" min="1" step="any" data-save></div>
       <div class="fld chk" style="align-self:end"><label class="chk"><input type="checkbox" id="compound" data-save>ریسک درصدی روی موجودی لحظه‌ای (مرکب)</label></div>
+      <div class="fld"><label>حجم ورود دوم</label><select id="e2Size" data-save>
+        <option value="same">هم‌حجم ورود اول</option><option value="pctVol">درصدی از حجم ورود اول</option>
+        <option value="fixed">ریسک ثابت دلاری برای ورود دوم</option><option value="pctRisk">درصد ریسک از موجودی برای ورود دوم</option></select>
+        <div class="hint">ریسک یعنی مبلغی که اگر ورود دوم به حد ضرر بخورد از دست می‌رود.</div></div>
+      <div class="fld" id="fE2Pct"><label>حجم ورود دوم (درصد حجم ورود اول)</label><input type="number" id="e2Pct" value="50" min="0" step="any" data-save></div>
+      <div class="fld" id="fE2Amt"><label>مبلغ ریسک ورود دوم</label><input type="number" id="e2Amt" value="5" min="0" step="any" data-save></div>
+      <div class="fld" id="fE2RiskPct"><label>درصد ریسک ورود دوم از موجودی</label><input type="number" id="e2RiskPct" value="0.5" min="0" step="0.1" data-save></div>
       <div class="fld"><label>اندازه یک لات (واحد ارز پایه)</label><input type="number" id="contract" value="100000" min="1" data-save><div class="hint">فقط برای نمایش حجم بر حسب لات.</div></div>
       <div class="fld"><label>نماد پول</label><input type="text" id="cur" value="$" data-save style="max-width:90px"></div>
       <div class="fld"><label>اندازه یک تیک قیمت (خالی یا صفر = تشخیص خودکار)</label><input type="number" id="mintick" value="" min="0" step="any" data-save placeholder="خودکار">
         <div class="hint" id="tickHint"></div></div>
       <div class="fld"><label>منطقه زمانی نمایش ساعت‌ها</label><input type="text" id="dispTz" value="Asia/Tehran" list="tzlist" data-save dir="ltr"></div>
     </div>
-    <div class="note">حجم هر معامله = مبلغ ریسک تقسیم بر فاصله ورود تا حد ضرر. ورود دوم هم‌حجم ورود اول است، مثل شبیه‌ساز اندیکاتور. برای جفت‌ارزهایی که ارز دوم آن‌ها دلار نیست، تبدیل ارز لحاظ نشده است.</div>
+    <div class="note">حجم هر معامله = مبلغ ریسک تقسیم بر فاصله ورود تا حد ضرر. حجم ورود دوم را با گزینه بالا دستی تنظیم می‌کنی؛ حالت «هم‌حجم» مثل شبیه‌ساز اندیکاتور است و چون ورود دوم نیمه راه حد ضرر قرار دارد، ریسک آن نصف ورود اول می‌شود. برای جفت‌ارزهایی که ارز دوم آن‌ها دلار نیست، تبدیل ارز لحاظ نشده است.</div>
   </div>
 
   <!-- ───────── اجرا ───────── -->
@@ -225,6 +232,7 @@ function readParams(){
   }));
   P.riskMode=$("riskMode").value; P.riskAmt=Math.max(0,Number($("riskAmt").value)||0);
   P.riskPct=Math.max(0,Number($("riskPct").value)||0); P.balance=Math.max(1,Number($("balance").value)||1000);
+  P.e2Size=$("e2Size").value; P.e2Pct=Math.max(0,Number($("e2Pct").value)||0); P.e2Amt=Math.max(0,Number($("e2Amt").value)||0); P.e2RiskPct=Math.max(0,Number($("e2RiskPct").value)||0);
   P.compound=$("compound").checked; P.contract=Math.max(1,Number($("contract").value)||100000);
   return P;
 }
@@ -353,7 +361,7 @@ function runEngine(D,P,partsFn){
           curSetup.status="filled";
           const riskMoney=P.riskMode==="fixed"?P.riskAmt:(P.compound?bal:P.balance)*P.riskPct/100;
           cur={id:trades.length+1,dir:d,setupBar:curSetup.bar,refBar:curSetup.refBar,fillBar:i,fillPx:fp,slPx:sp,tpPx:tpPx,riskPx:rk,
-               e2Lvl:P.useE2?e2Lvl:NaN,e2Bar:-1,e2Px:NaN,exitBar:-1,exitPx:NaN,open:true,res:"open",r1:NaN,r2:NaN,rTot:NaN,
+               e2Lvl:P.useE2?e2Lvl:NaN,e2Bar:-1,e2Px:NaN,e2Mult:NaN,e2Units:NaN,exitBar:-1,exitPx:NaN,open:true,res:"open",r1:NaN,r2:NaN,rTot:NaN,
                riskMoney:riskMoney,units:riskMoney/rk,pnl:NaN,balAfter:NaN,lvl:curSetup.lvl,lvlI:curSetup.lvlI,base:base};
           trades.push(cur);
         }
@@ -373,6 +381,13 @@ function runEngine(D,P,partsFn){
         if(e2Touch&&(slHit||!cancelHit)){
           e2Px=(!justFilled&&d*(o[i]-e2Lvl)<=0)?o[i]:e2Lvl;
           e2State=2; cur.e2Bar=i; cur.e2Px=e2Px;
+          let mult=1; const mode=P.e2Size||"same", dist2=d*(e2Px-slPx);
+          if(mode==="pctVol") mult=(P.e2Pct||0)/100;
+          else if(mode==="fixed"||mode==="pctRisk"){
+            const rm2=mode==="fixed"?P.e2Amt:(P.compound?bal:P.balance)*P.e2RiskPct/100;
+            mult=dist2>0?(rm2/dist2)/cur.units:0;
+          }
+          cur.e2Mult=mult; cur.e2Units=cur.units*mult;
         } else if(cancelHit){ e2State=3; }
       }
       let closed=false,exitPx=NaN;
@@ -380,7 +395,7 @@ function runEngine(D,P,partsFn){
       else if(tpHit){ exitPx=tpPx; closed=true; }
       if(closed){
         const r1=(d*(exitPx-fillPx)-costPx)/riskPx;
-        let r2=NaN; if(e2State===2) r2=(d*(exitPx-e2Px)-costPx)/riskPx;
+        let r2=NaN; if(e2State===2) r2=cur.e2Mult*(d*(exitPx-e2Px)-costPx)/riskPx;
         const rTot=r1+(isNaN(r2)?0:r2);
         cur.open=false; cur.exitBar=i; cur.exitPx=exitPx; cur.res=r1>0?"TP":"SL";
         cur.r1=r1; cur.r2=r2; cur.rTot=rTot; cur.pnl=rTot*cur.riskMoney;
@@ -789,7 +804,7 @@ function showResults(R){
 function buildTable(){
   const R=LAST; if(!R) return; const f=$("flt").value, cur=$("cur").value||"";
   viewList=[]; R.res.trades.forEach((t,i)=>{ const ok=f==="all"||(f==="win"&&!t.open&&t.rTot>0)||(f==="loss"&&!t.open&&t.rTot<=0)||(f==="buy"&&t.dir===1)||(f==="sell"&&t.dir===-1); if(ok) viewList.push(i); });
-  $("tbl").querySelector("thead").innerHTML=`<tr><th>#</th><th>جهت</th><th>زمان ورود</th><th>ورود ۱</th><th>حد ضرر</th><th>حد سود</th><th>ورود ۲</th><th>زمان خروج</th><th>قیمت خروج</th><th>نتیجه</th><th>R</th><th>سود و زیان (${cur})</th><th>حجم (واحد)</th><th>لات</th><th>مدت (کندل)</th></tr>`;
+  $("tbl").querySelector("thead").innerHTML=`<tr><th>#</th><th>جهت</th><th>زمان ورود</th><th>ورود ۱</th><th>حد ضرر</th><th>حد سود</th><th>ورود ۲</th><th>حجم ورود ۲</th><th>زمان خروج</th><th>قیمت خروج</th><th>نتیجه</th><th>R</th><th>سود و زیان (${cur})</th><th>حجم (واحد)</th><th>لات</th><th>مدت (کندل)</th></tr>`;
   $("tbl").querySelector("tbody").innerHTML=""; shown=0; $("cnt").textContent=viewList.length+" معامله"; addRows();
 }
 function addRows(){
@@ -797,7 +812,7 @@ function addRows(){
   for(let k=shown;k<end;k++){ const i=viewList[k], t=R.res.trades[i];
     h+=`<tr class="tr" data-i="${i}" id="row${i}"><td>${t.id}</td><td><span class="tag ${t.dir===1?"buy":"sell"}">${t.dir===1?"خرید":"فروش"}</span></td>
     <td class="l">${fmtTime(D.t[t.fillBar])}</td><td>${t.fillPx.toFixed(d)}</td><td>${t.slPx.toFixed(d)}</td><td>${t.tpPx.toFixed(d)}</td>
-    <td>${isNaN(t.e2Px)?"-":t.e2Px.toFixed(d)}</td><td class="l">${t.open?"-":fmtTime(D.t[t.exitBar])}</td><td>${t.open?"-":t.exitPx.toFixed(d)}</td>
+    <td>${isNaN(t.e2Px)?"-":t.e2Px.toFixed(d)}</td><td>${isNaN(t.e2Px)?"-":(t.e2Units/P.contract).toFixed(2)+" لات"}</td><td class="l">${t.open?"-":fmtTime(D.t[t.exitBar])}</td><td>${t.open?"-":t.exitPx.toFixed(d)}</td>
     <td>${t.open?"باز":(t.res==="TP"?"حد سود":"حد ضرر")}</td><td class="${sgn(t.rTot)}">${t.open?"-":(t.rTot>0?"+":"")+t.rTot.toFixed(2)}</td>
     <td class="${sgn(t.pnl)}">${t.open?"-":(t.pnl>0?"+":"")+t.pnl.toFixed(2)}</td><td>${Math.round(t.units).toLocaleString("en")}</td><td>${(t.units/P.contract).toFixed(2)}</td>
     <td>${t.open?"-":t.exitBar-t.fillBar}</td></tr>`; }
@@ -810,8 +825,8 @@ function focusIdx(i,noScroll){
 $("tbl").addEventListener("click",e=>{ const tr=e.target.closest("tr.tr"); if(!tr) return; focusIdx(+tr.dataset.i); $("cvPrice").scrollIntoView({behavior:"smooth",block:"center"}); });
 $("btnMore").onclick=addRows; $("flt").onchange=buildTable;
 $("btnCsv").onclick=()=>{
-  if(!LAST) return; const D=LAST.D; let s="id,dir,entry_time,entry1,sl,tp,entry2,exit_time,exit,result,R,pnl,units,lots,bars\n";
-  LAST.res.trades.forEach(t=>{ s+=[t.id,t.dir===1?"BUY":"SELL",fmtTime(D.t[t.fillBar]),t.fillPx,t.slPx,t.tpPx,isNaN(t.e2Px)?"":t.e2Px,t.open?"":fmtTime(D.t[t.exitBar]),t.open?"":t.exitPx,t.open?"open":t.res,t.open?"":t.rTot.toFixed(4),t.open?"":t.pnl.toFixed(2),Math.round(t.units),(t.units/LAST.P.contract).toFixed(3),t.open?"":t.exitBar-t.fillBar].join(",")+"\n"; });
+  if(!LAST) return; const D=LAST.D; let s="id,dir,entry_time,entry1,sl,tp,entry2,units2,exit_time,exit,result,R,pnl,units,lots,bars\n";
+  LAST.res.trades.forEach(t=>{ s+=[t.id,t.dir===1?"BUY":"SELL",fmtTime(D.t[t.fillBar]),t.fillPx,t.slPx,t.tpPx,isNaN(t.e2Px)?"":t.e2Px,isNaN(t.e2Px)?"":Math.round(t.e2Units),t.open?"":fmtTime(D.t[t.exitBar]),t.open?"":t.exitPx,t.open?"open":t.res,t.open?"":t.rTot.toFixed(4),t.open?"":t.pnl.toFixed(2),Math.round(t.units),(t.units/LAST.P.contract).toFixed(3),t.open?"":t.exitBar-t.fillBar].join(",")+"\n"; });
   download(`trades_${LAST.tf}m.csv`,s);
 };
 $("btnRun").onclick=()=>{
@@ -841,12 +856,14 @@ $("tPrev").onclick=()=>stepTrade(-1); $("tNext").onclick=()=>stepTrade(1);
 window.addEventListener("resize",()=>{ if(chart&&chart.D) chart.draw(); if(LAST) drawEquity($("cvEq"),LAST.res.stats.eq,LAST.P); });
 
 /* ───────── راه‌اندازی ───────── */
+function syncE2(){ const m=$("e2Size").value; $("fE2Pct").style.display=m==="pctVol"?"":"none"; $("fE2Amt").style.display=m==="fixed"?"":"none"; $("fE2RiskPct").style.display=m==="pctRisk"?"":"none"; }
+$("e2Size").onchange=syncE2;
 function syncRiskMode(){ const f=$("riskMode").value==="fixed"; $("fRiskAmt").style.display=f?"":"none"; $("fRiskPct").style.display=f?"none":""; }
 $("riskMode").onchange=syncRiskMode;
 $("btnReset").onclick=()=>{ PARAMS.forEach(g=>g.items.forEach(p=>{ const el=$("p_"+p.k); if(p.t==="bool") el.checked=p.def; else el.value=p.def; })); saveSettings(); updateTickHint(); };
 buildParams();
 { const t=new Date(), f=new Date(t.getTime()-30*86400000); $("dTo").value=t.toISOString().slice(0,10); $("dFrom").value=f.toISOString().slice(0,10); }
-loadSettings(); syncRiskMode();
+loadSettings(); syncRiskMode(); syncE2();
 document.addEventListener("change",e=>{ if(e.target.matches&&e.target.matches("[data-save]")){ saveSettings(); updateTickHint(); } });
 document.addEventListener("input",e=>{ if(e.target.id==="mintick"||e.target.id==="p_bufferTicks") updateTickHint(); });
 </script>
