@@ -117,6 +117,8 @@ tr.sel{background:#3a2f12!important}
     <h2>۴) اجرا</h2>
     <div class="row">
       <div class="fld" style="min-width:140px"><label>تایم‌فریم</label><select id="tfSel"><option value="1">۱ دقیقه</option><option value="5">۵ دقیقه</option><option value="15">۱۵ دقیقه</option></select></div>
+      <label class="chk" style="align-self:end"><input type="checkbox" id="skipWeekend" checked data-save>حذف شنبه و یکشنبه (جمعه به دوشنبه وصل شود)</label>
+      <div class="fld" style="min-width:150px"><label>منطقه زمانی تشخیص روز</label><input type="text" id="wkTz" value="UTC" list="tzlist" data-save dir="ltr"></div>
       <button id="btnRun" style="align-self:end">اجرای بک‌تست</button>
       <button class="warn" id="btnCmp" style="align-self:end">مقایسه ۱ و ۵ و ۱۵ دقیقه با همین تنظیمات</button>
     </div>
@@ -733,8 +735,20 @@ function prepareParams(D){
   if(P.useSess&&!parseSessions(P.sessStr).length) throw new Error("قالب ساعت‌های معامله درست نیست. مثال: 0900-1700");
   return P;
 }
+function weekdayFilter(D0){
+  let tz=$("wkTz").value.trim()||"UTC"; if(!validTz(tz)) throw new Error("منطقه زمانی تشخیص روز معتبر نیست.");
+  const keep=[]; const n=D0.t.length;
+  for(let i=0;i<n;i++){
+    let wd; if(tz==="UTC") wd=(Math.floor(D0.t[i]/86400000)+4)%7; else wd=(WD[partsOf(D0.t[i],tz).weekday]||1)-1; // 0 = یکشنبه ... 6 = شنبه
+    if(wd!==0&&wd!==6) keep.push(i);
+  }
+  const m=keep.length, D={t:new Float64Array(m),o:new Float64Array(m),h:new Float64Array(m),l:new Float64Array(m),c:new Float64Array(m),v:new Float64Array(m),tf:D0.tf,derived:D0.derived,dec:D0.dec,mint:D0.mint,removed:n-m};
+  for(let k=0;k<m;k++){ const i=keep[k]; D.t[k]=D0.t[i];D.o[k]=D0.o[i];D.h[k]=D0.h[i];D.l[k]=D0.l[i];D.c[k]=D0.c[i];D.v[k]=D0.v[i]; }
+  return D;
+}
 function doRun(tf){
-  const D=getDS(tf); if(!D) throw new Error(`داده تایم‌فریم ${tf} دقیقه موجود نیست.`);
+  let D=getDS(tf); if(!D) throw new Error(`داده تایم‌فریم ${tf} دقیقه موجود نیست.`);
+  if($("skipWeekend").checked) D=weekdayFilter(D);
   const P=prepareParams(D); const t0=performance.now();
   const res=runEngine(D,P,partsFnFactory());
   return {D,P,res,ms:performance.now()-t0,tf};
@@ -747,7 +761,7 @@ function showResults(R){
   const ret=(S.balEnd/P.balance-1)*100;
   $("stats").innerHTML=[
     statCard("تایم‌فریم",R.tf+" دقیقه"),
-    statCard("تعداد کندل",D.t.length.toLocaleString("en")),
+    statCard("تعداد کندل",D.t.length.toLocaleString("en")+(D.removed?` (${D.removed.toLocaleString("en")} کندل آخر هفته حذف شد)`:"")),
     statCard("ستاپ اسپایک",S.nSetups),
     statCard("معاملات بسته‌شده",S.closed+(S.cntOpen?` (+${S.cntOpen} باز)`:"")),
     statCard("نرخ برد ورود اول (مثل اندیکاتور)",fx(S.wrE1,1)+"%"),
